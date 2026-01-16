@@ -16,11 +16,7 @@ class NetworkMonitor:
         self.last_stats = {}
         
     def _get_app_name(self, proc: psutil.Process) -> str:
-        """Get application name from process.
-        
-        On macOS, tries to get the app bundle name.
-        On Linux, uses the executable name.
-        """
+        """Get application name from process."""
         try:
             if self.system == "Darwin":  # macOS
                 # Try to get the app bundle name
@@ -38,7 +34,7 @@ class NetworkMonitor:
             return "Unknown"
     
     def _format_bytes(self, bytes_val: int) -> str:
-        """Format bytes to human-readable format."""
+        """Format bytes to human-readable units."""
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
             if bytes_val < 1024.0:
                 return f"{bytes_val:.2f} {unit}"

@@ -145,11 +145,7 @@ class NetworkDatabase:
         return self.get_stats_since(month_start)
     
     def cleanup_old_data(self, days: int = 90):
-        """Remove data older than specified days.
-        
-        Args:
-            days: Number of days to keep (default: 90)
-        """
+        """Remove data older than specified days."""
         cutoff_date = datetime.now() - timedelta(days=days)
         
         with self.lock:
