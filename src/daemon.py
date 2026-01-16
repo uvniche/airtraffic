@@ -23,8 +23,9 @@ class AirTrafficDaemon:
         self.database = NetworkDatabase()
         self.running = False
         
-        # Set up signal handlers
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        # Set up signal handlers (Windows supports SIGINT, but not SIGTERM)
+        if hasattr(signal, 'SIGTERM'):
+            signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
     
     def _signal_handler(self, signum, frame):
@@ -34,10 +35,12 @@ class AirTrafficDaemon:
     
     def _get_pid_file(self) -> str:
         """Get path to PID file."""
-        if os.name == 'posix':
-            pid_dir = os.path.expanduser('~/.airtraffic')
+        import platform
+        
+        if platform.system() == 'Windows':
+            pid_dir = os.path.join(os.getenv('APPDATA'), 'AirTraffic')
         else:
-            pid_dir = os.path.expanduser('~/airtraffic')
+            pid_dir = os.path.expanduser('~/.airtraffic')
         
         os.makedirs(pid_dir, exist_ok=True)
         return os.path.join(pid_dir, 'daemon.pid')
@@ -56,6 +59,7 @@ class AirTrafficDaemon:
     
     def is_running(self) -> bool:
         """Check if daemon is already running."""
+        import platform
         pid_file = self._get_pid_file()
         
         if not os.path.exists(pid_file):
@@ -66,8 +70,20 @@ class AirTrafficDaemon:
                 pid = int(f.read().strip())
             
             # Check if process exists
-            os.kill(pid, 0)
-            return True
+            if platform.system() == 'Windows':
+                # On Windows, use tasklist to check if process exists
+                import subprocess
+                result = subprocess.run(['tasklist', '/FI', f'PID eq {pid}'], 
+                                      capture_output=True, text=True)
+                if str(pid) in result.stdout:
+                    return True
+                else:
+                    self._remove_pid()
+                    return False
+            else:
+                # On Unix, use os.kill with signal 0
+                os.kill(pid, 0)
+                return True
         except (OSError, ValueError):
             # Process doesn't exist or PID file is invalid
             self._remove_pid()
@@ -110,6 +126,7 @@ class AirTrafficDaemon:
     
     def stop(self):
         """Stop the daemon."""
+        import platform
         pid_file = self._get_pid_file()
         
         if not os.path.exists(pid_file):
@@ -121,15 +138,31 @@ class AirTrafficDaemon:
                 pid = int(f.read().strip())
             
             print(f"Stopping AirTraffic daemon (PID: {pid})...")
-            os.kill(pid, signal.SIGTERM)
+            
+            if platform.system() == 'Windows':
+                # On Windows, use taskkill
+                import subprocess
+                subprocess.run(['taskkill', '/PID', str(pid), '/F'], 
+                             capture_output=True, check=False)
+            else:
+                # On Unix, use SIGTERM
+                os.kill(pid, signal.SIGTERM)
             
             # Wait for process to stop
             for _ in range(10):
-                try:
-                    os.kill(pid, 0)
-                    time.sleep(0.5)
-                except OSError:
-                    break
+                if platform.system() == 'Windows':
+                    import subprocess
+                    result = subprocess.run(['tasklist', '/FI', f'PID eq {pid}'], 
+                                          capture_output=True, text=True)
+                    if str(pid) not in result.stdout:
+                        break
+                else:
+                    try:
+                        os.kill(pid, 0)
+                        time.sleep(0.5)
+                    except OSError:
+                        break
+                time.sleep(0.5)
             
             self._remove_pid()
             print("Daemon stopped.")

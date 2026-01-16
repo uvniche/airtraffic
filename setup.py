@@ -5,9 +5,9 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="airtraffic",
-    version="0.2.0",
+    version="0.3.0",
     author="uvniche",
-    description="A background network monitoring tool for macOS and Linux",
+    description="A cross-platform network monitoring tool for macOS, Linux, and Windows",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/uvniche/airtraffic",
@@ -18,6 +18,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: MacOS",
         "Operating System :: POSIX :: Linux",
+        "Operating System :: Microsoft :: Windows",
     ],
     python_requires=">=3.7",
     install_requires=[

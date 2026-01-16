@@ -111,7 +111,19 @@ def live_monitor(interval: int = 2):
     print("Press Ctrl+C to exit\n")
     
     # Check if running with sufficient privileges
-    if hasattr(os, 'geteuid') and os.geteuid() != 0:
+    system = platform.system()
+    if system == "Windows":
+        # Check if running as Administrator on Windows
+        try:
+            import ctypes
+            is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+            if not is_admin:
+                print("Warning: Running without Administrator privileges.")
+                print("Some network statistics may not be available.")
+                print("Try running as Administrator.\n")
+        except:
+            pass
+    elif hasattr(os, 'geteuid') and os.geteuid() != 0:
         print("Warning: Running without root privileges.")
         print("Some network statistics may not be available.")
         print("Try running with: sudo airtraffic live\n")
@@ -159,6 +171,8 @@ def install_service():
         install_launchd_service()
     elif system == "Linux":
         install_systemd_service()
+    elif system == "Windows":
+        install_windows_service()
     else:
         print(f"Service installation not supported on {system}")
         print("You can manually start the daemon with: airtraffic start")
@@ -183,12 +197,18 @@ def uninstall_service():
         uninstall_launchd_service()
     elif system == "Linux":
         uninstall_systemd_service()
+    elif system == "Windows":
+        uninstall_windows_service()
     else:
         print(f"   Service uninstallation not supported on {system}")
     
     # Step 2: Remove all data
     print("\n2. Removing all data...")
-    data_dir = os.path.expanduser('~/.airtraffic')
+    if system == "Windows":
+        data_dir = os.path.join(os.getenv('APPDATA'), 'AirTraffic')
+    else:
+        data_dir = os.path.expanduser('~/.airtraffic')
+    
     if os.path.exists(data_dir):
         shutil.rmtree(data_dir)
         print(f"   ✓ Removed {data_dir}")
@@ -319,6 +339,88 @@ def uninstall_launchd_service():
         os.remove(plist_path)
     
     print("✓ Service uninstalled!")
+
+
+def install_windows_service():
+    """Install Windows Task Scheduler service."""
+    import subprocess
+    
+    print("Installing Windows Task Scheduler service...")
+    
+    # Get the Python executable and script path
+    python_exe = sys.executable
+    script_path = os.path.join(os.path.dirname(__file__), 'daemon.py')
+    
+    # Create a batch file to run the daemon
+    appdata = os.getenv('APPDATA')
+    airtraffic_dir = os.path.join(appdata, 'AirTraffic')
+    os.makedirs(airtraffic_dir, exist_ok=True)
+    
+    batch_file = os.path.join(airtraffic_dir, 'run_daemon.bat')
+    with open(batch_file, 'w') as f:
+        f.write(f'@echo off\n')
+        f.write(f'"{python_exe}" -m airtraffic.daemon\n')
+    
+    # Create a VBS file to run the batch file hidden (no console window)
+    vbs_file = os.path.join(airtraffic_dir, 'run_daemon.vbs')
+    with open(vbs_file, 'w') as f:
+        f.write(f'Set WshShell = CreateObject("WScript.Shell")\n')
+        f.write(f'WshShell.Run """"{batch_file}"""", 0, False\n')
+    
+    # Create scheduled task using schtasks
+    task_name = "AirTrafficDaemon"
+    
+    try:
+        # Delete existing task if it exists
+        subprocess.run(['schtasks', '/Delete', '/TN', task_name, '/F'], 
+                      capture_output=True, check=False)
+        
+        # Create new task that runs at startup and stays running
+        subprocess.run([
+            'schtasks', '/Create',
+            '/TN', task_name,
+            '/TR', f'wscript.exe "{vbs_file}"',
+            '/SC', 'ONLOGON',
+            '/RL', 'HIGHEST',
+            '/F'
+        ], check=True, capture_output=True)
+        
+        # Start the task immediately
+        subprocess.run(['schtasks', '/Run', '/TN', task_name], 
+                      check=True, capture_output=True)
+        
+        # Give it a moment to start
+        time.sleep(2)
+        
+        print("✓ Service installed and started!")
+        print("  The daemon is now running and will start automatically on login.")
+        print(f"  Data directory: {airtraffic_dir}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Failed to install service: {e}")
+        print("  You may need to run this command as Administrator.")
+        print("  Alternatively, you can manually start the daemon with: airtraffic start")
+
+
+def uninstall_windows_service():
+    """Uninstall Windows Task Scheduler service."""
+    import subprocess
+    
+    print("Uninstalling Windows Task Scheduler service...")
+    
+    task_name = "AirTrafficDaemon"
+    
+    try:
+        # Stop and delete the scheduled task
+        subprocess.run(['schtasks', '/End', '/TN', task_name], 
+                      capture_output=True, check=False)
+        subprocess.run(['schtasks', '/Delete', '/TN', task_name, '/F'], 
+                      capture_output=True, check=False)
+        
+        print("✓ Service uninstalled!")
+        
+    except Exception as e:
+        print(f"Note: {e}")
 
 
 def main():

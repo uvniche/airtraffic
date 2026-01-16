@@ -18,10 +18,11 @@ class NetworkDatabase:
         """
         if db_path is None:
             # Default path based on OS
-            if os.name == 'posix':
-                db_dir = os.path.expanduser('~/.airtraffic')
+            import platform
+            if platform.system() == 'Windows':
+                db_dir = os.path.join(os.getenv('APPDATA'), 'AirTraffic')
             else:
-                db_dir = os.path.expanduser('~/airtraffic')
+                db_dir = os.path.expanduser('~/.airtraffic')
             
             os.makedirs(db_dir, exist_ok=True)
             db_path = os.path.join(db_dir, 'network_stats.db')

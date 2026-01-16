@@ -19,7 +19,7 @@ class NetworkMonitor:
         """Get application name from process.
         
         On macOS, tries to get the app bundle name.
-        On Linux, uses the executable name.
+        On Linux and Windows, uses the executable name.
         """
         try:
             if self.system == "Darwin":  # macOS
@@ -32,6 +32,12 @@ class NetworkMonitor:
                     return app_name
                 else:
                     return proc.name()
+            elif self.system == "Windows":
+                # On Windows, try to get the executable name without .exe
+                name = proc.name()
+                if name.endswith('.exe'):
+                    return name[:-4]
+                return name
             else:  # Linux and others
                 return proc.name()
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):

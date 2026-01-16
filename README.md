@@ -2,22 +2,17 @@
 
 CLI Network Tool
 
-## Supported Platforms
-
-- macOS
-- Linux
-
 ## Install
 
 ```bash
 pip install -e .
-sudo airtraffic install
+airtraffic install  # macOS/Linux: use sudo | Windows: run as Administrator
 ```
 
 ## Usage
 
 ```bash
-sudo airtraffic live
+airtraffic live     # macOS/Linux: use sudo | Windows: run as Administrator
 airtraffic today
 airtraffic week
 airtraffic month
@@ -26,5 +21,5 @@ airtraffic month
 ## Uninstall
 
 ```bash
-sudo airtraffic uninstall
+airtraffic uninstall  # macOS/Linux: use sudo | Windows: run as Administrator
 ```
