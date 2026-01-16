@@ -125,9 +125,9 @@ def live_monitor(interval: int = 2):
             clear_screen()
             
             print("=" * 72)
-            print("AirTraffic - Live Network Monitor")
-            print(f"Update interval: {interval} seconds | Press Ctrl+C to exit")
+            print("AirTraffic - CLI Network Tool")
             print("=" * 72)
+            print(f"Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
             print()
             
             # Get and display stats
@@ -139,7 +139,7 @@ def live_monitor(interval: int = 2):
             
             print()
             print("=" * 72)
-            print(f"Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print("Press Ctrl+C to exit")
             
             time.sleep(interval)
             
