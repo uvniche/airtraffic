@@ -13,11 +13,7 @@ class AirTrafficDaemon:
     """Background daemon for continuous network monitoring."""
     
     def __init__(self, interval: int = 60):
-        """Initialize daemon.
-        
-        Args:
-            interval: Collection interval in seconds (default: 60)
-        """
+        """Initialize daemon."""
         self.interval = interval
         self.monitor = NetworkMonitor()
         self.database = NetworkDatabase()

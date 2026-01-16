@@ -11,11 +11,7 @@ class NetworkDatabase:
     """SQLite database for storing network statistics."""
     
     def __init__(self, db_path: str = None):
-        """Initialize database connection.
-        
-        Args:
-            db_path: Path to SQLite database file
-        """
+        """Initialize database connection."""
         if db_path is None:
             # Default path based on OS
             if os.name == 'posix':
