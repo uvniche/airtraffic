@@ -11,12 +11,12 @@ from airtraffic.daemon import AirTrafficDaemon
 
 
 def clear_screen():
-    """Clear the terminal screen."""
+    """Clear terminal screen."""
     os.system('clear' if os.name != 'nt' else 'cls')
 
 
 def format_bytes(bytes_val: int) -> str:
-    """Format bytes to human-readable format."""
+    """Format bytes to human-readable units."""
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
         if bytes_val < 1024.0:
             return f"{bytes_val:.2f} {unit}"
@@ -25,13 +25,7 @@ def format_bytes(bytes_val: int) -> str:
 
 
 def display_historical_stats(stats: dict, title: str, period: str):
-    """Display historical network statistics.
-    
-    Args:
-        stats: Dictionary of app statistics
-        title: Title to display
-        period: Time period description
-    """
+    """Display historical network statistics."""
     print("=" * 80)
     print(f"AirTraffic - {title}")
     print(f"Period: {period}")
@@ -100,11 +94,7 @@ def show_month():
 
 
 def live_monitor(interval: int = 2):
-    """Display live network statistics.
-    
-    Args:
-        interval: Update interval in seconds (default: 2)
-    """
+    """Display live network statistics."""
     monitor = NetworkMonitor()
     
     print("AirTraffic - Live Network Monitor")
