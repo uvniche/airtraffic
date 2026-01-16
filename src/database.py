@@ -11,7 +11,11 @@ class NetworkDatabase:
     """SQLite database for storing network statistics."""
     
     def __init__(self, db_path: str = None):
-        """Initialize database connection."""
+        """Initialize database connection.
+        
+        Args:
+            db_path: Path to SQLite database file
+        """
         if db_path is None:
             # Default path based on OS
             if os.name == 'posix':
@@ -145,7 +149,11 @@ class NetworkDatabase:
         return self.get_stats_since(month_start)
     
     def cleanup_old_data(self, days: int = 90):
-        """Remove data older than specified days."""
+        """Remove data older than specified days.
+        
+        Args:
+            days: Number of days to keep (default: 90)
+        """
         cutoff_date = datetime.now() - timedelta(days=days)
         
         with self.lock:

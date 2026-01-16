@@ -68,10 +68,8 @@ This ensures both branches are fully synced with the remote repository and you'r
 
 # Documentation Style
 
-**All documentation should be direct and to the point.**
+Keep all documentation simple, direct, and straight to the point.
 
-- Include only what is needed—nothing less, nothing more
-- Avoid unnecessary explanations, fluff, or verbose descriptions
-- Focus on clarity and conciseness
-- Every sentence should serve a purpose
-- Remove redundant information
+- No fluff or unnecessary explanations
+- State exactly what is needed
+- Nothing more, nothing less

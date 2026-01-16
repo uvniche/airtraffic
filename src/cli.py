@@ -11,12 +11,12 @@ from airtraffic.daemon import AirTrafficDaemon
 
 
 def clear_screen():
-    """Clear terminal screen."""
+    """Clear the terminal screen."""
     os.system('clear' if os.name != 'nt' else 'cls')
 
 
 def format_bytes(bytes_val: int) -> str:
-    """Format bytes to human-readable units."""
+    """Format bytes to human-readable format."""
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
         if bytes_val < 1024.0:
             return f"{bytes_val:.2f} {unit}"
@@ -25,7 +25,13 @@ def format_bytes(bytes_val: int) -> str:
 
 
 def display_historical_stats(stats: dict, title: str, period: str):
-    """Display historical network statistics."""
+    """Display historical network statistics.
+    
+    Args:
+        stats: Dictionary of app statistics
+        title: Title to display
+        period: Time period description
+    """
     print("=" * 80)
     print(f"AirTraffic - {title}")
     print(f"Period: {period}")
@@ -94,7 +100,11 @@ def show_month():
 
 
 def live_monitor(interval: int = 2):
-    """Display live network statistics."""
+    """Display live network statistics.
+    
+    Args:
+        interval: Update interval in seconds (default: 2)
+    """
     monitor = NetworkMonitor()
     
     print("AirTraffic - Live Network Monitor")
@@ -155,10 +165,17 @@ def install_service():
 
 
 def uninstall_service():
-    """Uninstall AirTraffic system service."""
+    """Completely uninstall AirTraffic - service, data, and package."""
+    import shutil
+    import subprocess
+    
+    print("Uninstalling AirTraffic...")
+    print()
+    
     system = platform.system()
     
-    # Stop daemon first
+    # Step 1: Stop and remove service
+    print("1. Stopping and removing service...")
     daemon = AirTrafficDaemon()
     daemon.stop()
     
@@ -167,7 +184,29 @@ def uninstall_service():
     elif system == "Linux":
         uninstall_systemd_service()
     else:
-        print(f"Service uninstallation not supported on {system}")
+        print(f"   Service uninstallation not supported on {system}")
+    
+    # Step 2: Remove all data
+    print("\n2. Removing all data...")
+    data_dir = os.path.expanduser('~/.airtraffic')
+    if os.path.exists(data_dir):
+        shutil.rmtree(data_dir)
+        print(f"   ✓ Removed {data_dir}")
+    else:
+        print(f"   No data directory found")
+    
+    # Step 3: Uninstall package
+    print("\n3. Uninstalling package...")
+    try:
+        subprocess.run([sys.executable, '-m', 'pip', 'uninstall', '-y', 'airtraffic'], 
+                      check=True, capture_output=True)
+        print("   ✓ Package uninstalled")
+    except subprocess.CalledProcessError:
+        print("   ✓ Package already uninstalled or not found")
+    
+    print("\n" + "=" * 50)
+    print("✓ AirTraffic completely removed!")
+    print("=" * 50)
 
 
 def install_systemd_service():
@@ -217,6 +256,10 @@ def uninstall_systemd_service():
 
 def install_launchd_service():
     """Install launchd service on macOS."""
+    # Get the actual user (not root) for LaunchAgents
+    actual_user = os.getenv('SUDO_USER') or os.getenv('USER')
+    user_home = os.path.expanduser(f"~{actual_user}")
+    
     plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -234,31 +277,43 @@ def install_launchd_service():
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>{os.path.expanduser('~/.airtraffic/daemon.log')}</string>
+    <string>{user_home}/.airtraffic/daemon.log</string>
     <key>StandardErrorPath</key>
-    <string>{os.path.expanduser('~/.airtraffic/daemon.error.log')}</string>
+    <string>{user_home}/.airtraffic/daemon.error.log</string>
 </dict>
 </plist>
 """
     
-    plist_path = os.path.expanduser("~/Library/LaunchAgents/com.airtraffic.daemon.plist")
+    plist_path = f"{user_home}/Library/LaunchAgents/com.airtraffic.daemon.plist"
     os.makedirs(os.path.dirname(plist_path), exist_ok=True)
     
     with open(plist_path, 'w') as f:
         f.write(plist_content)
     
     print("Installing launchd service...")
-    os.system(f"launchctl load {plist_path}")
+    
+    # Use bootstrap instead of load (modern approach), suppress all output
+    domain = f"gui/{os.getuid()}" if os.getenv('SUDO_USER') else f"gui/{os.getuid()}"
+    os.system(f"launchctl bootstrap {domain} {plist_path} >/dev/null 2>&1 || launchctl load {plist_path} >/dev/null 2>&1")
+    
+    # Give it a moment to start
+    time.sleep(2)
+    
     print("✓ Service installed and started!")
-    print("  The daemon will now start automatically on boot.")
+    print("  The daemon is now running and will start automatically on boot.")
 
 
 def uninstall_launchd_service():
     """Uninstall launchd service on macOS."""
-    plist_path = os.path.expanduser("~/Library/LaunchAgents/com.airtraffic.daemon.plist")
+    actual_user = os.getenv('SUDO_USER') or os.getenv('USER')
+    user_home = os.path.expanduser(f"~{actual_user}")
+    plist_path = f"{user_home}/Library/LaunchAgents/com.airtraffic.daemon.plist"
     
     print("Uninstalling launchd service...")
-    os.system(f"launchctl unload {plist_path}")
+    
+    # Try both bootstrap and unload methods
+    domain = f"gui/{os.getuid()}"
+    os.system(f"launchctl bootout {domain} {plist_path} 2>/dev/null || launchctl unload {plist_path} 2>/dev/null")
     
     if os.path.exists(plist_path):
         os.remove(plist_path)
@@ -273,9 +328,6 @@ def main():
         print("\nUsage:")
         print("  airtraffic install     Install and start background service")
         print("  airtraffic uninstall   Stop and uninstall background service")
-        print("  airtraffic start       Start the background daemon")
-        print("  airtraffic stop        Stop the background daemon")
-        print("  airtraffic status      Check daemon status")
         print("  airtraffic today       Show today's network usage")
         print("  airtraffic week        Show this week's network usage")
         print("  airtraffic month       Show this month's network usage")
@@ -291,14 +343,11 @@ def main():
         print("\nCommands:")
         print("  install     Install as system service (auto-start on boot)")
         print("  uninstall   Remove system service and stop monitoring")
-        print("  start       Start the background daemon manually")
-        print("  stop        Stop the background daemon")
-        print("  status      Check if daemon is running")
         print("  today       Show network usage since midnight")
         print("  week        Show network usage since Monday midnight")
         print("  month       Show network usage since 1st of month")
         print("  live        Show real-time network statistics")
-        print("\nThe daemon collects network data in the background.")
+        print("\nThe daemon runs automatically after installation.")
         print("Use 'today', 'week', or 'month' to view historical usage.")
         sys.exit(0)
     
@@ -307,18 +356,6 @@ def main():
     
     elif command == 'uninstall':
         uninstall_service()
-    
-    elif command == 'start':
-        daemon = AirTrafficDaemon()
-        daemon.start()
-    
-    elif command == 'stop':
-        daemon = AirTrafficDaemon()
-        daemon.stop()
-    
-    elif command == 'status':
-        daemon = AirTrafficDaemon()
-        daemon.status()
     
     elif command == 'today':
         show_today()
