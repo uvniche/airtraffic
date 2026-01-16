@@ -5,14 +5,14 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="airtraffic",
-    version="0.1.0",
-    author="Your Name",
-    description="A CLI network monitoring tool for macOS and Linux",
+    version="0.2.0",
+    author="uvniche",
+    description="A background network monitoring tool for macOS and Linux",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/airtraffic",
-    package_dir={"": "src"},
-    packages=find_packages(where="src"),
+    url="https://github.com/uvniche/airtraffic",
+    packages=["airtraffic"],
+    package_dir={"airtraffic": "src"},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

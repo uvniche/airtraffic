@@ -65,3 +65,13 @@ This ensures both branches are fully synced with the remote repository and you'r
 - Do not reuse prior permission for future operations  
 - Each new "commit & push" request grants permission for that operation only
 - Never assume permission to commit & push automatically in future requests
+
+# Documentation Style
+
+**All documentation should be direct and to the point.**
+
+- Include only what is needed—nothing less, nothing more
+- Avoid unnecessary explanations, fluff, or verbose descriptions
+- Focus on clarity and conciseness
+- Every sentence should serve a purpose
+- Remove redundant information
