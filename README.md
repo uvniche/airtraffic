@@ -63,10 +63,7 @@ Real-time statistics, updates every 2 seconds.
 
 ## How It Works
 
-1. **Background Daemon**: Collects network statistics every 60 seconds
-2. **Local Database**: Stores data in `~/.airtraffic/network_stats.db`
-3. **Historical Queries**: Aggregates data for daily, weekly, and monthly reports
-4. **Auto-Start**: Runs automatically on boot (after `install` command)
+Daemon collects stats every 60 seconds, stores in `~/.airtraffic/network_stats.db`, and aggregates for daily/weekly/monthly queries.
 
 ## Requirements
 
@@ -76,16 +73,11 @@ Real-time statistics, updates every 2 seconds.
 
 ## Data Storage
 
-All data is stored locally on your computer:
 - Database: `~/.airtraffic/network_stats.db`
 - Logs: `~/.airtraffic/daemon.log` (macOS only)
 - PID file: `~/.airtraffic/daemon.pid`
 
-No data is sent to the internet or cloud services.
-
 ## Uninstalling
-
-To completely remove AirTraffic:
 
 ```bash
 sudo airtraffic uninstall
