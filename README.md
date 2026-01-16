@@ -2,6 +2,11 @@
 
 CLI Network Tool
 
+## Supported Platforms
+
+- macOS
+- Linux
+
 ## Install
 
 ```bash
