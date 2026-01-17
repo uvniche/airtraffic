@@ -372,55 +372,70 @@ class FirewallManager:
         pass
     
     def _block_linux(self, exe_path: str, app_name: str):
-        """Block application on Linux using iptables with owner match."""
-        # Get the user who owns processes running this binary
+        """Block application on Linux using file permissions (same as macOS)."""
         try:
-            # Use iptables with owner module to block by executable
-            # This requires the process to be running
+            # Kill all running instances
+            killed_count = 0
+            for proc in psutil.process_iter(['exe', 'pid', 'name']):
+                try:
+                    if proc.info['exe'] == exe_path:
+                        proc.kill()
+                        killed_count += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
             
-            # Block outgoing connections
-            subprocess.run([
-                'iptables', '-A', 'OUTPUT',
-                '-m', 'owner', '--uid-owner', str(os.getuid()),
-                '-m', 'string', '--string', os.path.basename(exe_path),
-                '--algo', 'bm',
-                '-j', 'DROP'
-            ], check=True, capture_output=True)
+            if killed_count > 0:
+                print(f"  Terminated {killed_count} running instance(s)")
             
-            print(f"  Note: Blocking outgoing connections from {app_name}")
+            # Remove execute permissions
+            import stat
+            current_mode = os.stat(exe_path).st_mode
+            os.chmod(exe_path, current_mode & ~stat.S_IXUSR & ~stat.S_IXGRP & ~stat.S_IXOTH)
+            print(f"  Removed execute permissions from {app_name}")
+            print(f"  ✓ Application is now blocked")
             
-        except subprocess.CalledProcessError as e:
-            # Try alternative method with cgroups
-            raise RuntimeError(f"Failed to block app: {e.stderr.decode()}")
+        except (OSError, PermissionError) as e:
+            raise RuntimeError(f"Failed to block app: {str(e)}")
     
     def _unblock_linux(self, exe_path: str, app_name: str):
-        """Unblock application on Linux."""
+        """Unblock application on Linux by restoring execute permissions."""
         try:
-            subprocess.run([
-                'iptables', '-D', 'OUTPUT',
-                '-m', 'owner', '--uid-owner', str(os.getuid()),
-                '-m', 'string', '--string', os.path.basename(exe_path),
-                '--algo', 'bm',
-                '-j', 'DROP'
-            ], check=True, capture_output=True)
-        except subprocess.CalledProcessError as e:
-            # Rule might not exist, that's okay
-            pass
+            # Restore execute permissions
+            import stat
+            current_mode = os.stat(exe_path).st_mode
+            os.chmod(exe_path, current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            print(f"  Restored execute permissions")
+            print(f"  ✓ Application is now allowed")
+        except (OSError, PermissionError) as e:
+            raise RuntimeError(f"Failed to allow app: {str(e)}")
     
     def _block_windows(self, exe_path: str, app_name: str):
         """Block application on Windows using Windows Firewall."""
         rule_name = f"AirTraffic_Block_{app_name}"
         
         try:
+            # Kill all running instances first
+            killed_count = 0
+            for proc in psutil.process_iter(['exe', 'pid', 'name']):
+                try:
+                    if proc.info['exe'] and proc.info['exe'].lower() == exe_path.lower():
+                        proc.kill()
+                        killed_count += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            if killed_count > 0:
+                print(f"  Terminated {killed_count} running instance(s)")
+            
             # Block outbound connections
-            subprocess.run([
+            result = subprocess.run([
                 'netsh', 'advfirewall', 'firewall', 'add', 'rule',
                 f'name={rule_name}',
                 'dir=out',
                 'action=block',
                 f'program={exe_path}',
                 'enable=yes'
-            ], check=True, capture_output=True)
+            ], check=True, capture_output=True, text=True)
             
             # Block inbound connections
             subprocess.run([
@@ -430,10 +445,16 @@ class FirewallManager:
                 'action=block',
                 f'program={exe_path}',
                 'enable=yes'
-            ], check=True, capture_output=True)
+            ], check=True, capture_output=True, text=True)
+            
+            print(f"  Created firewall rules (inbound & outbound)")
+            print(f"  ✓ Application is now blocked from network access")
             
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to block app: {e.stderr.decode()}")
+            stderr = e.stderr if e.stderr else str(e)
+            if 'denied' in stderr.lower() or 'access' in stderr.lower():
+                raise RuntimeError("Failed to create firewall rule. Run as Administrator.")
+            raise RuntimeError(f"Failed to block app: {stderr}")
     
     def _unblock_windows(self, exe_path: str, app_name: str):
         """Unblock application on Windows."""
@@ -441,17 +462,21 @@ class FirewallManager:
         
         try:
             # Remove outbound rule
-            subprocess.run([
+            result_out = subprocess.run([
                 'netsh', 'advfirewall', 'firewall', 'delete', 'rule',
                 f'name={rule_name}'
-            ], capture_output=True)
+            ], capture_output=True, text=True)
             
             # Remove inbound rule
-            subprocess.run([
+            result_in = subprocess.run([
                 'netsh', 'advfirewall', 'firewall', 'delete', 'rule',
                 f'name={rule_name}_In'
-            ], capture_output=True)
+            ], capture_output=True, text=True)
+            
+            print(f"  Removed firewall rules")
+            print(f"  ✓ Application can now access network")
             
         except subprocess.CalledProcessError as e:
             # Rules might not exist, that's okay
+            print(f"  ✓ Application can now access network")
             pass
