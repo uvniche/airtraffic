@@ -9,7 +9,7 @@ from airtraffic.monitor import NetworkMonitor
 from airtraffic.database import NetworkDatabase
 
 
-class AirTrafficDaemon:
+class AirtraffDaemon:
     """Background daemon for continuous network monitoring."""
     
     def __init__(self, interval: int = 60):
@@ -38,7 +38,7 @@ class AirTrafficDaemon:
         import platform
         
         if platform.system() == 'Windows':
-            pid_dir = os.path.join(os.getenv('APPDATA'), 'AirTraffic')
+            pid_dir = os.path.join(os.getenv('APPDATA'), 'Airtraff')
         else:
             pid_dir = os.path.expanduser('~/.airtraffic')
         
@@ -92,10 +92,10 @@ class AirTrafficDaemon:
     def start(self):
         """Start the daemon."""
         if self.is_running():
-            print("AirTraffic daemon is already running.")
+            print("Airtraff daemon is already running.")
             return
         
-        print("Starting AirTraffic daemon...")
+        print("Starting Airtraff daemon...")
         self._write_pid()
         self.running = True
         
@@ -130,14 +130,14 @@ class AirTrafficDaemon:
         pid_file = self._get_pid_file()
         
         if not os.path.exists(pid_file):
-            print("AirTraffic daemon is not running.")
+            print("Airtraff daemon is not running.")
             return
         
         try:
             with open(pid_file, 'r') as f:
                 pid = int(f.read().strip())
             
-            print(f"Stopping AirTraffic daemon (PID: {pid})...")
+            print(f"Stopping Airtraff daemon (PID: {pid})...")
             
             if platform.system() == 'Windows':
                 # On Windows, use taskkill
@@ -177,16 +177,16 @@ class AirTrafficDaemon:
             pid_file = self._get_pid_file()
             with open(pid_file, 'r') as f:
                 pid = int(f.read().strip())
-            print(f"AirTraffic daemon is running (PID: {pid})")
+            print(f"Airtraff daemon is running (PID: {pid})")
             print(f"Database: {self.database.db_path}")
             print(f"Database size: {self.database.get_database_size() / 1024:.2f} KB")
         else:
-            print("AirTraffic daemon is not running.")
+            print("Airtraff daemon is not running.")
 
 
 def run_daemon():
     """Run the daemon in foreground mode."""
-    daemon = AirTrafficDaemon(interval=60)
+    daemon = AirtraffDaemon(interval=60)
     daemon.start()
 
 

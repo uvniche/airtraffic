@@ -1,4 +1,4 @@
-"""Network monitoring module for AirTraffic."""
+"""Network monitoring module for Airtraff."""
 
 import os
 import platform

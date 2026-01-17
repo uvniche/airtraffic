@@ -1,4 +1,4 @@
-"""CLI interface for AirTraffic."""
+"""CLI interface for Airtraff."""
 
 import sys
 import time
@@ -7,7 +7,7 @@ import platform
 from datetime import datetime, timedelta
 from airtraffic.monitor import NetworkMonitor
 from airtraffic.database import NetworkDatabase
-from airtraffic.daemon import AirTrafficDaemon
+from airtraffic.daemon import AirtraffDaemon
 from airtraffic.firewall import FirewallManager
 
 
@@ -54,12 +54,12 @@ def require_elevated_privileges(command: str):
             print("Please run this command as Administrator:")
             print(f"  1. Right-click on Command Prompt or PowerShell")
             print(f"  2. Select 'Run as administrator'")
-            print(f"  3. Run: airtraffic {command}")
+            print(f"  3. Run: airtraff {command}")
         else:  # Unix-like (macOS, Linux)
             print("This command requires root privileges.")
             print()
             print("Please run this command with sudo:")
-            print(f"  sudo airtraffic {command}")
+            print(f"  sudo airtraff {command}")
         
         print()
         sys.exit(1)
@@ -83,7 +83,7 @@ def display_historical_stats(stats: dict, title: str, period: str):
         period: Time period description
     """
     print("=" * 80)
-    print(f"AirTraffic - {title}")
+    print(f"Airtraff - {title}")
     print(f"Period: {period}")
     print("=" * 80)
     print()
@@ -337,10 +337,10 @@ def live_monitor(interval: int = 2):
             print("Please run this command as Administrator:")
             print("  1. Right-click on Command Prompt or PowerShell")
             print("  2. Select 'Run as administrator'")
-            print("  3. Run: airtraffic live")
+            print("  3. Run: airtraff live")
         else:  # Unix-like (macOS, Linux)
             print("Please run this command with sudo:")
-            print("  sudo airtraffic live")
+            print("  sudo airtraff live")
         
         print()
         print("Continuing anyway (limited functionality)...")
@@ -361,7 +361,7 @@ def live_monitor(interval: int = 2):
             clear_screen()
             
             print("=" * 72)
-            print("AirTraffic - CLI Network Tool")
+            print("Airtraff - CLI Network Tool")
             print("=" * 72)
             print(f"Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
             
@@ -385,7 +385,7 @@ def live_monitor(interval: int = 2):
             time.sleep(interval)
             
     except KeyboardInterrupt:
-        print("\n\nExiting AirTraffic...")
+        print("\n\nExiting Airtraff...")
         sys.exit(0)
     except Exception as e:
         print(f"\nError: {e}")
@@ -393,7 +393,7 @@ def live_monitor(interval: int = 2):
 
 
 def install_service():
-    """Install AirTraffic as a system service."""
+    """Install Airtraff as a system service."""
     system = platform.system()
     
     if system == "Darwin":  # macOS
@@ -404,22 +404,22 @@ def install_service():
         install_windows_service()
     else:
         print(f"Service installation not supported on {system}")
-        print("You can manually start the daemon with: airtraffic start")
+        print("You can manually start the daemon with: airtraff start")
 
 
 def uninstall_service():
-    """Completely uninstall AirTraffic - service, data, and package."""
+    """Completely uninstall Airtraff - service, data, and package."""
     import shutil
     import subprocess
     
-    print("Uninstalling AirTraffic...")
+    print("Uninstalling Airtraff...")
     print()
     
     system = platform.system()
     
     # Step 1: Stop and remove service
     print("1. Stopping and removing service...")
-    daemon = AirTrafficDaemon()
+    daemon = AirtraffDaemon()
     daemon.stop()
     
     if system == "Darwin":  # macOS
@@ -434,7 +434,7 @@ def uninstall_service():
     # Step 2: Remove all data
     print("\n2. Removing all data...")
     if system == "Windows":
-        data_dir = os.path.join(os.getenv('APPDATA'), 'AirTraffic')
+        data_dir = os.path.join(os.getenv('APPDATA'), 'Airtraff')
     else:
         data_dir = os.path.expanduser('~/.airtraffic')
     
@@ -454,14 +454,14 @@ def uninstall_service():
         print("   ✓ Package already uninstalled or not found")
     
     print("\n" + "=" * 50)
-    print("✓ AirTraffic completely removed!")
+    print("✓ Airtraff completely removed!")
     print("=" * 50)
 
 
 def install_systemd_service():
     """Install systemd service on Linux."""
     service_content = f"""[Unit]
-Description=AirTraffic Network Monitor
+Description=Airtraff Network Monitor
 After=network.target
 
 [Service]
@@ -582,7 +582,7 @@ def install_windows_service():
     
     # Create a batch file to run the daemon
     appdata = os.getenv('APPDATA')
-    airtraffic_dir = os.path.join(appdata, 'AirTraffic')
+    airtraffic_dir = os.path.join(appdata, 'Airtraff')
     os.makedirs(airtraffic_dir, exist_ok=True)
     
     batch_file = os.path.join(airtraffic_dir, 'run_daemon.bat')
@@ -628,7 +628,7 @@ def install_windows_service():
     except subprocess.CalledProcessError as e:
         print(f"✗ Failed to install service: {e}")
         print("  You may need to run this command as Administrator.")
-        print("  Alternatively, you can manually start the daemon with: airtraffic start")
+        print("  Alternatively, you can manually start the daemon with: airtraff start")
 
 
 def uninstall_windows_service():
@@ -655,28 +655,28 @@ def uninstall_windows_service():
 def main():
     """Main entry point for the CLI."""
     if len(sys.argv) < 2:
-        print("AirTraffic - Network Monitoring Tool")
+        print("Airtraff - Network Monitoring Tool")
         print("\nUsage:")
-        print("  airtraffic install            Install and start background service")
-        print("  airtraffic uninstall          Stop and uninstall background service")
-        print("  airtraffic since <timespec>   Show network usage since specified time")
-        print("  airtraffic live               Show live network statistics")
-        print("  airtraffic block <app|all>    Block application(s) from using network")
-        print("  airtraffic allow <app|all>    Allow application(s) to use network")
-        print("  airtraffic blocked            List all blocked applications")
-        print("  airtraffic allowed            List all allowed applications")
+        print("  airtraff install            Install and start background service")
+        print("  airtraff uninstall          Stop and uninstall background service")
+        print("  airtraff since <timespec>   Show network usage since specified time")
+        print("  airtraff live               Show live network statistics")
+        print("  airtraff block <app|all>    Block application(s) from using network")
+        print("  airtraff allow <app|all>    Allow application(s) to use network")
+        print("  airtraff blocked            List all blocked applications")
+        print("  airtraff allowed            List all allowed applications")
         print("\nTime specifications for 'since':")
         print("  today                         Since today at 12:00 AM")
         print("  month                         Since first of this month at 12:00 AM")
         print("  dd:mm:yyyy hh:mm:ss          Custom date and time")
         print("\nExamples:")
-        print("  airtraffic since today")
-        print("  airtraffic block Chrome")
-        print("  airtraffic block all")
-        print("  airtraffic allow Chrome")
-        print("  airtraffic allow all")
-        print("  airtraffic blocked")
-        print("  airtraffic allowed")
+        print("  airtraff since today")
+        print("  airtraff block Chrome")
+        print("  airtraff block all")
+        print("  airtraff allow Chrome")
+        print("  airtraff allow all")
+        print("  airtraff blocked")
+        print("  airtraff allowed")
         print("\nOptions:")
         print("  -h, --help                    Show this help message")
         sys.exit(0)
@@ -684,7 +684,7 @@ def main():
     command = sys.argv[1].lower()
     
     if command in ['-h', '--help', 'help']:
-        print("AirTraffic - Network Monitoring Tool")
+        print("Airtraff - Network Monitoring Tool")
         print("\nCommands:")
         print("  install              Install as system service (auto-start on boot)")
         print("  uninstall            Remove system service and stop monitoring")
@@ -699,14 +699,14 @@ def main():
         print("  month                Since first of this month at 12:00 AM")
         print("  dd:mm:yyyy hh:mm:ss  Custom date and time (e.g., '17:01:2026 14:30:00')")
         print("\nExamples:")
-        print("  airtraffic since today")
-        print("  airtraffic since month")
-        print("  sudo airtraffic block Chrome")
-        print("  sudo airtraffic block all")
-        print("  sudo airtraffic allow Chrome")
-        print("  sudo airtraffic allow all")
-        print("  airtraffic blocked")
-        print("  airtraffic allowed")
+        print("  airtraff since today")
+        print("  airtraff since month")
+        print("  sudo airtraff block Chrome")
+        print("  sudo airtraff block all")
+        print("  sudo airtraff allow Chrome")
+        print("  sudo airtraff allow all")
+        print("  airtraff blocked")
+        print("  airtraff allowed")
         print("\nThe daemon runs automatically after installation.")
         print("Use 'since' to view historical usage from any point in time.")
         print("Use 'block'/'allow' to control network access per application.")
@@ -721,15 +721,15 @@ def main():
     elif command == 'since':
         if len(sys.argv) < 3:
             print("Error: 'since' command requires a time specification.")
-            print("\nUsage: airtraffic since <timespec>")
+            print("\nUsage: airtraff since <timespec>")
             print("\nTime specifications:")
             print("  today              Since today at 12:00 AM")
             print("  month              Since first of this month at 12:00 AM")
             print("  dd:mm:yyyy hh:mm:ss   Custom date and time")
             print("\nExamples:")
-            print("  airtraffic since today")
-            print("  airtraffic since month")
-            print("  airtraffic since '17:01:2026 14:30:00'")
+            print("  airtraff since today")
+            print("  airtraff since month")
+            print("  airtraff since '17:01:2026 14:30:00'")
             sys.exit(1)
         
         # Join remaining arguments in case the datetime has spaces
