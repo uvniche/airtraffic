@@ -14,7 +14,7 @@ airtraffic install  # macOS/Linux: use sudo | Windows: run as Administrator
 ### Monitor Network Usage
 
 ```bash
-sudo airtraffic live                   # Live network monitor (requires sudo)
+airtraffic live                        # macOS/Linux: use sudo | Windows: run as Administrator
 airtraffic since today                 # Show usage since today 12:00 AM
 airtraffic since month                 # Show usage since first of month 12:00 AM
 airtraffic since "17:01:2026 14:30:00" # Show usage since custom date/time (dd:mm:yyyy hh:mm:ss)
@@ -23,12 +23,12 @@ airtraffic since "17:01:2026 14:30:00" # Show usage since custom date/time (dd:m
 ### Allow/Block Applications
 
 ```bash
-sudo airtraffic block Application       # Block an application from using network
-sudo airtraffic allow Application       # Allow an application to use network
-sudo airtraffic block all               # Block ALL applications
-sudo airtraffic allow all               # Allow ALL applications
-airtraffic blocked                      # List blocked applications
-airtraffic allowed                      # List allowed applications
+airtraffic block Application           # macOS/Linux: use sudo | Windows: run as Administrator
+airtraffic allow Application           # macOS/Linux: use sudo | Windows: run as Administrator
+airtraffic block all                   # macOS/Linux: use sudo | Windows: run as Administrator
+airtraffic allow all                   # macOS/Linux: use sudo | Windows: run as Administrator
+airtraffic blocked                     # List blocked applications
+airtraffic allowed                     # List allowed applications
 ```
 
 ## Uninstall
