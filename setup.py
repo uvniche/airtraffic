@@ -26,7 +26,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "airtraff=airtraffic.cli:main",
+            "airtraffic=airtraffic.cli:main",
         ],
     },
 )
