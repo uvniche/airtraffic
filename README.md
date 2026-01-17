@@ -20,7 +20,7 @@ airtraffic since month                 # Show usage since first of month 12:00 A
 airtraffic since "17:01:2026 14:30:00" # Show usage since custom date/time (dd:mm:yyyy hh:mm:ss)
 ```
 
-### Block Applications
+### Allow/Block Applications
 
 ```bash
 sudo airtraffic block Chrome           # Block Chrome from using network
