@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from airtraffic.monitor import NetworkMonitor
 from airtraffic.database import NetworkDatabase
 from airtraffic.daemon import AirTrafficDaemon
+from airtraffic.firewall import FirewallManager
 
 
 def clear_screen():
@@ -141,6 +142,79 @@ def show_since(since_arg: str):
     period = f"Since {start_str} ({duration_str} ago)"
     
     display_historical_stats(stats, "Network Usage", period)
+
+
+def block_app(app_name: str):
+    """Block an application from accessing the network.
+    
+    Args:
+        app_name: Name or path of the application to block
+    """
+    try:
+        fw = FirewallManager()
+        fw.block_app(app_name)
+    except PermissionError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: Failed to block application: {e}")
+        sys.exit(1)
+
+
+def unblock_app(app_name: str):
+    """Unblock an application from accessing the network.
+    
+    Args:
+        app_name: Name or path of the application to unblock
+    """
+    try:
+        fw = FirewallManager()
+        fw.unblock_app(app_name)
+    except PermissionError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: Failed to unblock application: {e}")
+        sys.exit(1)
+
+
+def list_blocked_apps():
+    """List all blocked applications."""
+    try:
+        fw = FirewallManager()
+        blocked = fw.list_blocked()
+        
+        if not blocked:
+            print("No applications are currently blocked.")
+            return
+        
+        print("=" * 80)
+        print("Blocked Applications")
+        print("=" * 80)
+        print()
+        print(f"{'Application':<30} {'Path':<50}")
+        print("-" * 80)
+        
+        for app in blocked:
+            name = app['name']
+            path = app['path']
+            # Truncate path if too long
+            if len(path) > 47:
+                path = "..." + path[-44:]
+            print(f"{name:<30} {path:<50}")
+        
+        print()
+        print(f"Total: {len(blocked)} blocked application(s)")
+        
+    except Exception as e:
+        print(f"Error: Failed to list blocked applications: {e}")
+        sys.exit(1)
 
 
 def live_monitor(interval: int = 2):
@@ -476,6 +550,9 @@ def main():
         print("  airtraffic uninstall          Stop and uninstall background service")
         print("  airtraffic since <timespec>   Show network usage since specified time")
         print("  airtraffic live               Show live network statistics")
+        print("  airtraffic block <app>        Block application from using network")
+        print("  airtraffic unblock <app>      Unblock application")
+        print("  airtraffic list-blocked       List all blocked applications")
         print("\nTime specifications for 'since':")
         print("  today                         Since today at 12:00 AM")
         print("  month                         Since first of this month at 12:00 AM")
@@ -484,6 +561,8 @@ def main():
         print("  airtraffic since today")
         print("  airtraffic since month")
         print("  airtraffic since '17:01:2026 14:30:00'")
+        print("  airtraffic block Chrome")
+        print("  airtraffic unblock Chrome")
         print("\nOptions:")
         print("  -h, --help                    Show this help message")
         sys.exit(0)
@@ -497,6 +576,9 @@ def main():
         print("  uninstall          Remove system service and stop monitoring")
         print("  since <timespec>   Show network usage since specified time")
         print("  live               Show real-time network statistics")
+        print("  block <app>        Block application from using network (requires sudo)")
+        print("  unblock <app>      Unblock application (requires sudo)")
+        print("  list-blocked       List all blocked applications")
         print("\nTime specifications for 'since':")
         print("  today              Since today at 12:00 AM")
         print("  month              Since first of this month at 12:00 AM")
@@ -505,8 +587,12 @@ def main():
         print("  airtraffic since today")
         print("  airtraffic since month")
         print("  airtraffic since '17:01:2026 14:30:00'")
+        print("  sudo airtraffic block Chrome")
+        print("  sudo airtraffic unblock Chrome")
+        print("  airtraffic list-blocked")
         print("\nThe daemon runs automatically after installation.")
         print("Use 'since' to view historical usage from any point in time.")
+        print("Use 'block' to prevent applications from accessing the network.")
         sys.exit(0)
     
     elif command == 'install':
@@ -532,6 +618,34 @@ def main():
         # Join remaining arguments in case the datetime has spaces
         since_arg = ' '.join(sys.argv[2:])
         show_since(since_arg)
+    
+    elif command == 'block':
+        if len(sys.argv) < 3:
+            print("Error: 'block' command requires an application name.")
+            print("\nUsage: sudo airtraffic block <application>")
+            print("\nExamples:")
+            print("  sudo airtraffic block Chrome")
+            print("  sudo airtraffic block firefox")
+            print("  sudo airtraffic block /Applications/Safari.app/Contents/MacOS/Safari")
+            sys.exit(1)
+        
+        app_name = ' '.join(sys.argv[2:])
+        block_app(app_name)
+    
+    elif command == 'unblock':
+        if len(sys.argv) < 3:
+            print("Error: 'unblock' command requires an application name.")
+            print("\nUsage: sudo airtraffic unblock <application>")
+            print("\nExamples:")
+            print("  sudo airtraffic unblock Chrome")
+            print("  sudo airtraffic unblock firefox")
+            sys.exit(1)
+        
+        app_name = ' '.join(sys.argv[2:])
+        unblock_app(app_name)
+    
+    elif command == 'list-blocked':
+        list_blocked_apps()
     
     elif command == 'live':
         live_monitor()
