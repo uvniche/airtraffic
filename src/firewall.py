@@ -14,7 +14,7 @@ class FirewallManager:
     def __init__(self):
         self.system = platform.system()
         self.blocked_apps_file = self._get_blocked_apps_file()
-        
+    
     def _get_blocked_apps_file(self) -> str:
         """Get the path to the blocked apps tracking file."""
         if self.system == 'Windows':
@@ -322,35 +322,54 @@ class FirewallManager:
         print("=" * 70)
     
     def _block_macos(self, exe_path: str, app_name: str):
-        """Block application on macOS using pf (Packet Filter)."""
-        # Create PF rule to block the application
-        # Note: macOS doesn't have native per-app blocking in pf
-        # We'll use Little Snitch style approach or use socketfilter
-        # For simplicity, we'll use launchctl to prevent the app from running
+        """Block application on macOS using launchd to prevent execution.
         
-        # Alternative: Use the macOS application firewall
+        macOS doesn't provide simple per-app network filtering without system extensions.
+        This implementation prevents the app from running entirely.
+        """
         try:
-            # Block incoming connections
-            subprocess.run([
-                '/usr/libexec/ApplicationFirewall/socketfilterfw',
-                '--blockapp', exe_path
-            ], check=True, capture_output=True)
+            # Kill all running instances
+            killed_count = 0
+            for proc in psutil.process_iter(['exe', 'pid', 'name']):
+                try:
+                    if proc.info['exe'] == exe_path:
+                        proc.kill()
+                        killed_count += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
             
-            print(f"  Note: This blocks incoming connections for {app_name}")
-            print(f"  To block all network access, the app must be terminated.")
+            if killed_count > 0:
+                print(f"  Terminated {killed_count} running instance(s)")
             
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to block app: {e.stderr.decode()}")
+            # Set file permissions to prevent execution
+            try:
+                import stat
+                current_mode = os.stat(exe_path).st_mode
+                # Remove execute permissions
+                os.chmod(exe_path, current_mode & ~stat.S_IXUSR & ~stat.S_IXGRP & ~stat.S_IXOTH)
+                print(f"  Removed execute permissions from {app_name}")
+                print(f"  ✓ Application is now blocked")
+            except (OSError, PermissionError) as e:
+                print(f"  ⚠️  Could not remove execute permissions: {e}")
+                print(f"  Process was killed but may restart")
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to block app: {str(e)}")
     
     def _unblock_macos(self, exe_path: str, app_name: str):
-        """Unblock application on macOS."""
+        """Unblock application on macOS by restoring execute permissions."""
         try:
-            subprocess.run([
-                '/usr/libexec/ApplicationFirewall/socketfilterfw',
-                '--unblockapp', exe_path
-            ], check=True, capture_output=True)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to unblock app: {e.stderr.decode()}")
+            # Restore execute permissions
+            import stat
+            current_mode = os.stat(exe_path).st_mode
+            # Add back execute permissions
+            os.chmod(exe_path, current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            print(f"  Restored execute permissions")
+            print(f"  ✓ Application is now allowed")
+        except (OSError, PermissionError) as e:
+            print(f"  ⚠️  Could not restore execute permissions: {e}")
+            # Still remove from blocked list
+        pass
     
     def _block_linux(self, exe_path: str, app_name: str):
         """Block application on Linux using iptables with owner match."""
