@@ -178,6 +178,149 @@ class FirewallManager:
         blocked_apps = self._load_blocked_apps()
         return [{"name": name, "path": path} for name, path in blocked_apps.items()]
     
+    def list_allowed(self) -> List[Dict[str, str]]:
+        """List all allowed (not blocked) applications with active network connections.
+        
+        Returns:
+            List of dictionaries with app info
+        """
+        blocked_apps = self._load_blocked_apps()
+        blocked_paths = set(blocked_apps.values())
+        
+        allowed_apps = {}
+        
+        # Get all processes with network connections
+        try:
+            connections = psutil.net_connections(kind='inet')
+            connection_pids = set(conn.pid for conn in connections if conn.pid)
+            
+            for proc in psutil.process_iter(['pid', 'name', 'exe']):
+                try:
+                    if proc.info['pid'] in connection_pids:
+                        exe_path = proc.info['exe']
+                        if exe_path and exe_path not in blocked_paths:
+                            app_name = proc.info['name']
+                            if app_name not in allowed_apps:
+                                allowed_apps[app_name] = exe_path
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except psutil.AccessDenied:
+            # If we can't get connections, just list all running apps not blocked
+            for proc in psutil.process_iter(['name', 'exe']):
+                try:
+                    exe_path = proc.info['exe']
+                    if exe_path and exe_path not in blocked_paths:
+                        app_name = proc.info['name']
+                        if app_name not in allowed_apps:
+                            allowed_apps[app_name] = exe_path
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        
+        return [{"name": name, "path": path} for name, path in allowed_apps.items()]
+    
+    def block_all(self):
+        """Block all currently running applications from accessing the network."""
+        # Check if we have root/admin privileges
+        if self.system != 'Windows' and os.geteuid() != 0:
+            raise PermissionError("Root privileges required. Run with: sudo airtraffic block all")
+        
+        blocked_count = 0
+        errors = []
+        
+        # Get all unique running processes
+        processes = {}
+        for proc in psutil.process_iter(['name', 'exe']):
+            try:
+                exe_path = proc.info['exe']
+                app_name = proc.info['name']
+                if exe_path and app_name:
+                    processes[app_name] = exe_path
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        print(f"Found {len(processes)} applications to block...")
+        print()
+        
+        for app_name, exe_path in processes.items():
+            try:
+                # Block based on platform
+                if self.system == "Darwin":  # macOS
+                    self._block_macos(exe_path, app_name)
+                elif self.system == "Linux":
+                    self._block_linux(exe_path, app_name)
+                elif self.system == "Windows":
+                    self._block_windows(exe_path, app_name)
+                
+                blocked_count += 1
+                print(f"✓ Blocked: {app_name}")
+            except Exception as e:
+                errors.append(f"✗ Failed to block {app_name}: {e}")
+        
+        # Save all to tracking file
+        blocked_apps = self._load_blocked_apps()
+        blocked_apps.update(processes)
+        self._save_blocked_apps(blocked_apps)
+        
+        print()
+        print("=" * 70)
+        print(f"Blocked {blocked_count} application(s)")
+        if errors:
+            print(f"Failed {len(errors)} application(s)")
+            print()
+            for error in errors[:5]:  # Show first 5 errors
+                print(error)
+            if len(errors) > 5:
+                print(f"... and {len(errors) - 5} more errors")
+        print("=" * 70)
+    
+    def allow_all(self):
+        """Allow all currently blocked applications to access the network."""
+        # Check if we have root/admin privileges
+        if self.system != 'Windows' and os.geteuid() != 0:
+            raise PermissionError("Root privileges required. Run with: sudo airtraffic allow all")
+        
+        blocked_apps = self._load_blocked_apps()
+        
+        if not blocked_apps:
+            print("No applications are currently blocked.")
+            return
+        
+        allowed_count = 0
+        errors = []
+        
+        print(f"Found {len(blocked_apps)} blocked application(s) to allow...")
+        print()
+        
+        for app_name, exe_path in list(blocked_apps.items()):
+            try:
+                # Unblock based on platform
+                if self.system == "Darwin":  # macOS
+                    self._unblock_macos(exe_path, app_name)
+                elif self.system == "Linux":
+                    self._unblock_linux(exe_path, app_name)
+                elif self.system == "Windows":
+                    self._unblock_windows(exe_path, app_name)
+                
+                allowed_count += 1
+                print(f"✓ Allowed: {app_name}")
+            except Exception as e:
+                errors.append(f"✗ Failed to allow {app_name}: {e}")
+        
+        # Clear tracking file
+        self._save_blocked_apps({})
+        
+        print()
+        print("=" * 70)
+        print(f"Allowed {allowed_count} application(s)")
+        if errors:
+            print(f"Failed {len(errors)} application(s)")
+            print()
+            for error in errors[:5]:  # Show first 5 errors
+                print(error)
+            if len(errors) > 5:
+                print(f"... and {len(errors) - 5} more errors")
+        print("=" * 70)
+    
     def _block_macos(self, exe_path: str, app_name: str):
         """Block application on macOS using pf (Packet Filter)."""
         # Create PF rule to block the application

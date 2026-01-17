@@ -25,7 +25,10 @@ airtraffic since "17:01:2026 14:30:00" # Show usage since custom date/time (dd:m
 ```bash
 sudo airtraffic block Chrome           # Block Chrome from using network
 sudo airtraffic allow Chrome           # Allow Chrome to use network
-airtraffic list-blocked                # List all blocked applications
+sudo airtraffic block all              # Block ALL applications
+sudo airtraffic allow all              # Allow ALL applications
+airtraffic blocked                     # List blocked applications
+airtraffic allowed                     # List allowed applications
 ```
 
 ## Uninstall
