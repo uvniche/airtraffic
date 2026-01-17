@@ -4,7 +4,7 @@ import sys
 import time
 import os
 import platform
-from datetime import datetime
+from datetime import datetime, timedelta
 from airtraffic.monitor import NetworkMonitor
 from airtraffic.database import NetworkDatabase
 from airtraffic.daemon import AirTrafficDaemon
@@ -71,32 +71,76 @@ def display_historical_stats(stats: dict, title: str, period: str):
     print()
 
 
-def show_today():
-    """Show today's network statistics."""
-    db = NetworkDatabase()
-    stats = db.get_today_stats()
-    today = datetime.now().strftime("%A, %B %d, %Y")
-    display_historical_stats(stats, "Today's Usage", f"Since midnight (12:00 AM) - {today}")
+def parse_since_datetime(since_arg: str) -> datetime:
+    """Parse the 'since' argument to a datetime object.
+    
+    Args:
+        since_arg: The time specification (e.g., 'today', 'month', or 'dd:mm:yyyy hh:mm:ss')
+    
+    Returns:
+        datetime object representing the start time
+    
+    Raises:
+        ValueError: If the format is invalid
+    """
+    since_arg = since_arg.lower().strip()
+    
+    if since_arg == 'today':
+        # Today at 12:00 AM
+        return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    elif since_arg == 'month':
+        # First day of this month at 12:00 AM
+        return datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    else:
+        # Try to parse as "dd:mm:yyyy hh:mm:ss"
+        try:
+            return datetime.strptime(since_arg, "%d:%m:%Y %H:%M:%S")
+        except ValueError:
+            raise ValueError(
+                f"Invalid date format: '{since_arg}'\n"
+                "Use one of:\n"
+                "  - 'today' (since today 12:00 AM)\n"
+                "  - 'month' (since first of month 12:00 AM)\n"
+                "  - 'dd:mm:yyyy hh:mm:ss' (custom date/time)"
+            )
 
 
-def show_week():
-    """Show this week's network statistics."""
+def show_since(since_arg: str):
+    """Show network statistics since a specified time.
+    
+    Args:
+        since_arg: Time specification string
+    """
+    try:
+        start_time = parse_since_datetime(since_arg)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    
     db = NetworkDatabase()
-    stats = db.get_week_stats()
+    stats = db.get_stats_since(start_time)
+    
+    # Format the period description
     now = datetime.now()
-    days_since_monday = now.weekday()
-    monday = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    monday = monday.replace(day=now.day - days_since_monday)
-    period = f"Since Monday, {monday.strftime('%B %d')} at 12:00 AM"
-    display_historical_stats(stats, "This Week's Usage", period)
-
-
-def show_month():
-    """Show this month's network statistics."""
-    db = NetworkDatabase()
-    stats = db.get_month_stats()
-    month_start = datetime.now().replace(day=1).strftime("%B %d, %Y")
-    display_historical_stats(stats, "This Month's Usage", f"Since {month_start} at 12:00 AM")
+    duration = now - start_time
+    
+    if duration.days > 0:
+        duration_str = f"{duration.days} day{'s' if duration.days != 1 else ''}"
+    elif duration.seconds >= 3600:
+        hours = duration.seconds // 3600
+        duration_str = f"{hours} hour{'s' if hours != 1 else ''}"
+    elif duration.seconds >= 60:
+        minutes = duration.seconds // 60
+        duration_str = f"{minutes} minute{'s' if minutes != 1 else ''}"
+    else:
+        duration_str = f"{duration.seconds} second{'s' if duration.seconds != 1 else ''}"
+    
+    start_str = start_time.strftime("%A, %B %d, %Y at %I:%M:%S %p")
+    period = f"Since {start_str} ({duration_str} ago)"
+    
+    display_historical_stats(stats, "Network Usage", period)
 
 
 def live_monitor(interval: int = 2):
@@ -428,14 +472,20 @@ def main():
     if len(sys.argv) < 2:
         print("AirTraffic - Network Monitoring Tool")
         print("\nUsage:")
-        print("  airtraffic install     Install and start background service")
-        print("  airtraffic uninstall   Stop and uninstall background service")
-        print("  airtraffic today       Show today's network usage")
-        print("  airtraffic week        Show this week's network usage")
-        print("  airtraffic month       Show this month's network usage")
-        print("  airtraffic live        Show live network statistics")
+        print("  airtraffic install            Install and start background service")
+        print("  airtraffic uninstall          Stop and uninstall background service")
+        print("  airtraffic since <timespec>   Show network usage since specified time")
+        print("  airtraffic live               Show live network statistics")
+        print("\nTime specifications for 'since':")
+        print("  today                         Since today at 12:00 AM")
+        print("  month                         Since first of this month at 12:00 AM")
+        print("  dd:mm:yyyy hh:mm:ss          Custom date and time")
+        print("\nExamples:")
+        print("  airtraffic since today")
+        print("  airtraffic since month")
+        print("  airtraffic since '17:01:2026 14:30:00'")
         print("\nOptions:")
-        print("  -h, --help             Show this help message")
+        print("  -h, --help                    Show this help message")
         sys.exit(0)
     
     command = sys.argv[1].lower()
@@ -443,14 +493,20 @@ def main():
     if command in ['-h', '--help', 'help']:
         print("AirTraffic - Network Monitoring Tool")
         print("\nCommands:")
-        print("  install     Install as system service (auto-start on boot)")
-        print("  uninstall   Remove system service and stop monitoring")
-        print("  today       Show network usage since midnight")
-        print("  week        Show network usage since Monday midnight")
-        print("  month       Show network usage since 1st of month")
-        print("  live        Show real-time network statistics")
+        print("  install            Install as system service (auto-start on boot)")
+        print("  uninstall          Remove system service and stop monitoring")
+        print("  since <timespec>   Show network usage since specified time")
+        print("  live               Show real-time network statistics")
+        print("\nTime specifications for 'since':")
+        print("  today              Since today at 12:00 AM")
+        print("  month              Since first of this month at 12:00 AM")
+        print("  dd:mm:yyyy hh:mm:ss   Custom date and time (e.g., '17:01:2026 14:30:00')")
+        print("\nExamples:")
+        print("  airtraffic since today")
+        print("  airtraffic since month")
+        print("  airtraffic since '17:01:2026 14:30:00'")
         print("\nThe daemon runs automatically after installation.")
-        print("Use 'today', 'week', or 'month' to view historical usage.")
+        print("Use 'since' to view historical usage from any point in time.")
         sys.exit(0)
     
     elif command == 'install':
@@ -459,14 +515,23 @@ def main():
     elif command == 'uninstall':
         uninstall_service()
     
-    elif command == 'today':
-        show_today()
-    
-    elif command == 'week':
-        show_week()
-    
-    elif command == 'month':
-        show_month()
+    elif command == 'since':
+        if len(sys.argv) < 3:
+            print("Error: 'since' command requires a time specification.")
+            print("\nUsage: airtraffic since <timespec>")
+            print("\nTime specifications:")
+            print("  today              Since today at 12:00 AM")
+            print("  month              Since first of this month at 12:00 AM")
+            print("  dd:mm:yyyy hh:mm:ss   Custom date and time")
+            print("\nExamples:")
+            print("  airtraffic since today")
+            print("  airtraffic since month")
+            print("  airtraffic since '17:01:2026 14:30:00'")
+            sys.exit(1)
+        
+        # Join remaining arguments in case the datetime has spaces
+        since_arg = ' '.join(sys.argv[2:])
+        show_since(since_arg)
     
     elif command == 'live':
         live_monitor()
