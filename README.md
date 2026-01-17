@@ -1,6 +1,6 @@
 # AirTraffic
 
-CLI Network Tool - Monitor and control network usage per application
+CLI Network Tool
 
 ## Install
 
