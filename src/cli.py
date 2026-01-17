@@ -16,6 +16,55 @@ def clear_screen():
     os.system('clear' if os.name != 'nt' else 'cls')
 
 
+def check_elevated_privileges() -> bool:
+    """Check if running with elevated privileges.
+    
+    Returns:
+        True if running with sudo/administrator privileges
+    """
+    system = platform.system()
+    
+    if system == "Windows":
+        try:
+            import ctypes
+            return ctypes.windll.shell32.IsUserAnAdmin() != 0
+        except:
+            return False
+    else:  # Unix-like (macOS, Linux)
+        return os.geteuid() == 0
+
+
+def require_elevated_privileges(command: str):
+    """Check for elevated privileges and exit with message if not available.
+    
+    Args:
+        command: The command being executed (for error message)
+    """
+    if not check_elevated_privileges():
+        system = platform.system()
+        
+        print("=" * 70)
+        print("ERROR: Elevated Privileges Required")
+        print("=" * 70)
+        print()
+        
+        if system == "Windows":
+            print("This command requires Administrator privileges.")
+            print()
+            print("Please run this command as Administrator:")
+            print(f"  1. Right-click on Command Prompt or PowerShell")
+            print(f"  2. Select 'Run as administrator'")
+            print(f"  3. Run: airtraffic {command}")
+        else:  # Unix-like (macOS, Linux)
+            print("This command requires root privileges.")
+            print()
+            print("Please run this command with sudo:")
+            print(f"  sudo airtraffic {command}")
+        
+        print()
+        sys.exit(1)
+
+
 def format_bytes(bytes_val: int) -> str:
     """Format bytes to human-readable format."""
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -150,6 +199,9 @@ def block_app(app_name: str):
     Args:
         app_name: Name or path of the application to block
     """
+    # Check for elevated privileges first
+    require_elevated_privileges(f"block {app_name}")
+    
     try:
         fw = FirewallManager()
         fw.block_app(app_name)
@@ -164,12 +216,15 @@ def block_app(app_name: str):
         sys.exit(1)
 
 
-def unblock_app(app_name: str):
-    """Unblock an application from accessing the network.
+def allow_app(app_name: str):
+    """Allow an application to access the network (remove block).
     
     Args:
-        app_name: Name or path of the application to unblock
+        app_name: Name or path of the application to allow
     """
+    # Check for elevated privileges first
+    require_elevated_privileges(f"allow {app_name}")
+    
     try:
         fw = FirewallManager()
         fw.unblock_app(app_name)
@@ -180,7 +235,7 @@ def unblock_app(app_name: str):
         print(f"Error: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"Error: Failed to unblock application: {e}")
+        print(f"Error: Failed to allow application: {e}")
         sys.exit(1)
 
 
@@ -223,28 +278,36 @@ def live_monitor(interval: int = 2):
     Args:
         interval: Update interval in seconds (default: 2)
     """
+    # Check if running with sufficient privileges
+    if not check_elevated_privileges():
+        system = platform.system()
+        
+        print("=" * 70)
+        print("WARNING: Elevated Privileges Required")
+        print("=" * 70)
+        print()
+        print("The live monitor requires elevated privileges to see network")
+        print("connections and track per-application usage.")
+        print()
+        
+        if system == "Windows":
+            print("Please run this command as Administrator:")
+            print("  1. Right-click on Command Prompt or PowerShell")
+            print("  2. Select 'Run as administrator'")
+            print("  3. Run: airtraffic live")
+        else:  # Unix-like (macOS, Linux)
+            print("Please run this command with sudo:")
+            print("  sudo airtraffic live")
+        
+        print()
+        print("Continuing anyway (limited functionality)...")
+        print()
+        time.sleep(2)
+    
     monitor = NetworkMonitor()
     
     print("AirTraffic - Live Network Monitor")
     print("Press Ctrl+C to exit\n")
-    
-    # Check if running with sufficient privileges
-    system = platform.system()
-    if system == "Windows":
-        # Check if running as Administrator on Windows
-        try:
-            import ctypes
-            is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
-            if not is_admin:
-                print("Warning: Running without Administrator privileges.")
-                print("Some network statistics may not be available.")
-                print("Try running as Administrator.\n")
-        except:
-            pass
-    elif hasattr(os, 'geteuid') and os.geteuid() != 0:
-        print("Warning: Running without root privileges.")
-        print("Some network statistics may not be available.")
-        print("Try running with: sudo airtraffic live\n")
     
     try:
         # Initial stats collection
@@ -258,6 +321,11 @@ def live_monitor(interval: int = 2):
             print("AirTraffic - CLI Network Tool")
             print("=" * 72)
             print(f"Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # Show privilege warning in header if not elevated
+            if not check_elevated_privileges():
+                print("⚠️  WARNING: Limited mode - run with sudo for full stats")
+            
             print()
             
             # Get and display stats
@@ -551,7 +619,7 @@ def main():
         print("  airtraffic since <timespec>   Show network usage since specified time")
         print("  airtraffic live               Show live network statistics")
         print("  airtraffic block <app>        Block application from using network")
-        print("  airtraffic unblock <app>      Unblock application")
+        print("  airtraffic allow <app>        Allow application to use network")
         print("  airtraffic list-blocked       List all blocked applications")
         print("\nTime specifications for 'since':")
         print("  today                         Since today at 12:00 AM")
@@ -562,7 +630,7 @@ def main():
         print("  airtraffic since month")
         print("  airtraffic since '17:01:2026 14:30:00'")
         print("  airtraffic block Chrome")
-        print("  airtraffic unblock Chrome")
+        print("  airtraffic allow Chrome")
         print("\nOptions:")
         print("  -h, --help                    Show this help message")
         sys.exit(0)
@@ -577,7 +645,7 @@ def main():
         print("  since <timespec>   Show network usage since specified time")
         print("  live               Show real-time network statistics")
         print("  block <app>        Block application from using network (requires sudo)")
-        print("  unblock <app>      Unblock application (requires sudo)")
+        print("  allow <app>        Allow application to use network (requires sudo)")
         print("  list-blocked       List all blocked applications")
         print("\nTime specifications for 'since':")
         print("  today              Since today at 12:00 AM")
@@ -588,7 +656,7 @@ def main():
         print("  airtraffic since month")
         print("  airtraffic since '17:01:2026 14:30:00'")
         print("  sudo airtraffic block Chrome")
-        print("  sudo airtraffic unblock Chrome")
+        print("  sudo airtraffic allow Chrome")
         print("  airtraffic list-blocked")
         print("\nThe daemon runs automatically after installation.")
         print("Use 'since' to view historical usage from any point in time.")
@@ -632,17 +700,17 @@ def main():
         app_name = ' '.join(sys.argv[2:])
         block_app(app_name)
     
-    elif command == 'unblock':
+    elif command == 'allow':
         if len(sys.argv) < 3:
-            print("Error: 'unblock' command requires an application name.")
-            print("\nUsage: sudo airtraffic unblock <application>")
+            print("Error: 'allow' command requires an application name.")
+            print("\nUsage: sudo airtraffic allow <application>")
             print("\nExamples:")
-            print("  sudo airtraffic unblock Chrome")
-            print("  sudo airtraffic unblock firefox")
+            print("  sudo airtraffic allow Chrome")
+            print("  sudo airtraffic allow firefox")
             sys.exit(1)
         
         app_name = ' '.join(sys.argv[2:])
-        unblock_app(app_name)
+        allow_app(app_name)
     
     elif command == 'list-blocked':
         list_blocked_apps()
