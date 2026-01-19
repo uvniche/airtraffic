@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airtraffic"
+version = "0.3.0"
+description = "A cross-platform network monitoring tool for macOS, Linux, and Windows"
+readme = "README.md"
+requires-python = ">=3.7"
+authors = [
+    {name = "uvniche"}
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+]
+dependencies = [
+    "psutil>=5.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/uvniche/airtraffic"
+
+[project.scripts]
+airtraffic = "airtraffic.cli:main"
+
+[tool.setuptools]
+packages = ["airtraffic"]
+package-dir = {"airtraffic" = "src"}
