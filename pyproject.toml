@@ -31,3 +31,6 @@ airtraffic = "airtraffic.cli:main"
 [tool.setuptools]
 packages = ["airtraffic"]
 package-dir = {"airtraffic" = "src"}
+
+[tool.setuptools.package-data]
+airtraffic = ["py.typed"]

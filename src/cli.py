@@ -536,8 +536,21 @@ def install_launchd_service():
     plist_path = f"{user_home}/Library/LaunchAgents/com.airtraffic.daemon.plist"
     os.makedirs(os.path.dirname(plist_path), exist_ok=True)
     
-    with open(plist_path, 'w') as f:
-        f.write(plist_content)
+    # If file exists and is owned by root, use sudo to remove it
+    if os.path.exists(plist_path):
+        try:
+            # Try to write normally first
+            with open(plist_path, 'w') as f:
+                f.write(plist_content)
+        except PermissionError:
+            # File is owned by root, need to use sudo to remove it
+            print("Existing service file requires elevated permissions to update...")
+            os.system(f"sudo rm -f {plist_path}")
+            with open(plist_path, 'w') as f:
+                f.write(plist_content)
+    else:
+        with open(plist_path, 'w') as f:
+            f.write(plist_content)
     
     print("Installing launchd service...")
     
