@@ -2,7 +2,23 @@
 alwaysApply: true
 ---
 
-# Commit and Push Workflow
+# LaTeX Auto-Compilation Rule
+
+Whenever you make changes to a LaTeX file (.tex), automatically compile it using the appropriate LaTeX compiler (xelatex for files using fontspec package, pdflatex otherwise) to generate the PDF output.
+
+After compilation, always delete auxiliary LaTeX files (.aux, .log, .out, .nav, .toc, .snm) to keep the directory clean.
+
+## MCP Configuration Reference
+
+When working with MCP servers or needing to check MCP functionality, always reference the MCP configuration file at `.cursor/mcp.json` in the root directory. This file contains the configuration for:
+
+- GitHub MCP server with authentication
+- Context7 MCP server for library documentation
+- Playwright MCP server for web automation
+
+Use this configuration to verify MCP server status and troubleshoot any MCP-related issues.
+
+## Commit and Push Workflow
 
 When the user says "commit & push", follow this specific workflow:
 
@@ -24,7 +40,7 @@ When the user says "commit & push", follow this specific workflow:
 
 This ensures both branches stay in sync and all changes are properly versioned across both development and main branches.
 
-# Pull Latest Workflow
+## Pull Latest Workflow
 
 When the user says "pull latest" or "sync with remote", follow this specific workflow:
 
@@ -47,16 +63,16 @@ When the user says "pull latest" or "sync with remote", follow this specific wor
 
 This ensures both branches are fully synced with the remote repository and you're ready to continue development.
 
-# CRITICAL: Never Commit & Push Without Permission
+## CRITICAL: Never Commit & Push Without Permission
 
-**NEVER commit and push code changes without explicit user permission.** 
+**NEVER commit and push code changes without explicit user permission.**
 
 - Only execute git operations when the user specifically requests them
 - This rule overrides all other workflow rules
 - The user must explicitly say "commit & push" or similar command
 - **IMPORTANT: Permission is NOT persistent. You must get explicit permission each time.**
 
-# User Permission Rule
+## User Permission Rule
 
 **When the user says "commit & push", that is sufficient permission for that specific request.**
 
@@ -66,7 +82,7 @@ This ensures both branches are fully synced with the remote repository and you'r
 - Each new "commit & push" request grants permission for that operation only
 - Never assume permission to commit & push automatically in future requests
 
-# Documentation Style
+## Documentation Style
 
 Keep all documentation simple, direct, and straight to the point.
 
