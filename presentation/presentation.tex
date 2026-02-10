@@ -147,24 +147,25 @@
 pip install -e .
 airtraffic install   (sudo / Admin)
   \end{verbatim}
-  \textbf{Common commands:}
-  \begin{verbatim}
-airtraffic live
-airtraffic since today | month | "dd:mm:yyyy hh:mm:ss"
-sudo airtraffic block Chrome | allow Chrome | block all | allow all
-airtraffic blocked | allowed
-airtraffic uninstall
-  \end{verbatim}
+  \textbf{Commands:}
+  \begin{itemize}
+    \item \texttt{airtraffic live} -- Shows real-time network usage
+    \item \texttt{airtraffic since today | month} -- Shows historical usage
+    \item \texttt{sudo airtraffic block <app>} -- Blocks app from network
+    \item \texttt{sudo airtraffic allow <app>} -- Allows app to use network
+    \item \texttt{airtraffic blocked | allowed} -- Lists blocked/allowed apps
+    \item \texttt{airtraffic uninstall} -- Removes background service
+  \end{itemize}
 \end{frame}
 
 %------------------------------------------------------------------------------
 \section{Summary}
 \begin{frame}{Summary}
   \begin{itemize}
-    \item AirTraffic = \textbf{monitor} (live + since) + \textbf{firewall} (block/allow per app) via a single CLI.
-    \item Daemon persists stats to SQLite; CLI reads for ``since'' queries.
-    \item Cross-platform: Windows uses firewall rules; macOS/Linux use execute-bit blocking.
-    \item One-time \texttt{install} sets up launchd (macOS), systemd user (Linux), or Task Scheduler (Windows).
+    \item AirTraffic lets you see which apps use your internet and control their access - all from one simple tool.
+    \item A background service saves your network history so you can check past usage anytime.
+    \item Works on all platforms: Windows blocks apps using its firewall; Mac/Linux stop apps from running.
+    \item One-time setup makes the background service start automatically when you turn on your computer.
   \end{itemize}
 \end{frame}
 
