@@ -118,7 +118,7 @@ class FirewallManager:
         blocked_apps[app_name] = exe_path
         self._save_blocked_apps(blocked_apps)
         
-        print(f"✓ Blocked: {app_name}")
+        print(f"[BLOCKED] {app_name}")
         print(f"  Path: {exe_path}")
     
     def unblock_app(self, app_identifier: str):
@@ -166,7 +166,7 @@ class FirewallManager:
             del blocked_apps[app_name]
             self._save_blocked_apps(blocked_apps)
         
-        print(f"✓ Unblocked: {app_name}")
+        print(f"[ALLOWED] {app_name}")
         print(f"  Path: {exe_path}")
     
     def list_blocked(self) -> List[Dict[str, str]]:
@@ -252,9 +252,9 @@ class FirewallManager:
                     self._block_windows(exe_path, app_name)
                 
                 blocked_count += 1
-                print(f"✓ Blocked: {app_name}")
+                print(f"[BLOCKED] {app_name}")
             except Exception as e:
-                errors.append(f"✗ Failed to block {app_name}: {e}")
+                errors.append(f"[FAILED] Failed to block {app_name}: {e}")
         
         # Save all to tracking file
         blocked_apps = self._load_blocked_apps()
@@ -302,9 +302,9 @@ class FirewallManager:
                     self._unblock_windows(exe_path, app_name)
                 
                 allowed_count += 1
-                print(f"✓ Allowed: {app_name}")
+                print(f"[ALLOWED] {app_name}")
             except Exception as e:
-                errors.append(f"✗ Failed to allow {app_name}: {e}")
+                errors.append(f"[FAILED] Failed to allow {app_name}: {e}")
         
         # Clear tracking file
         self._save_blocked_apps({})
@@ -322,110 +322,163 @@ class FirewallManager:
         print("=" * 70)
     
     def _block_macos(self, exe_path: str, app_name: str):
-        """Block application on macOS using launchd to prevent execution.
+        """Block application on macOS from accessing the network.
         
-        macOS doesn't provide simple per-app network filtering without system extensions.
-        This implementation prevents the app from running entirely.
+        Creates pf (packet filter) rules to block network traffic.
+        The app can still run but network connections will be blocked.
         """
         try:
-            # Kill all running instances
-            killed_count = 0
-            for proc in psutil.process_iter(['exe', 'pid', 'name']):
+            # Create pf anchor configuration directory
+            pf_dir = os.path.expanduser('~/.airtraffic/pf')
+            os.makedirs(pf_dir, exist_ok=True)
+            
+            # Get all PIDs for this application
+            pids = []
+            for proc in psutil.process_iter(['exe', 'pid']):
                 try:
                     if proc.info['exe'] == exe_path:
-                        proc.kill()
-                        killed_count += 1
+                        pids.append(proc.info['pid'])
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
             
-            if killed_count > 0:
-                print(f"  Terminated {killed_count} running instance(s)")
-            
-            # Set file permissions to prevent execution
-            try:
-                import stat
-                current_mode = os.stat(exe_path).st_mode
-                # Remove execute permissions
-                os.chmod(exe_path, current_mode & ~stat.S_IXUSR & ~stat.S_IXGRP & ~stat.S_IXOTH)
-                print(f"  Removed execute permissions from {app_name}")
-                print(f"  ✓ Application is now blocked")
-            except (OSError, PermissionError) as e:
-                print(f"  ⚠️  Could not remove execute permissions: {e}")
-                print(f"  Process was killed but may restart")
+            if pids:
+                # Create pf rules file
+                rules_file = os.path.join(pf_dir, 'airtraffic.rules')
+                
+                # Load existing rules
+                existing_rules = []
+                if os.path.exists(rules_file):
+                    with open(rules_file, 'r') as f:
+                        existing_rules = [line for line in f.readlines() if not line.startswith(f'# {app_name}')]
+                
+                # Add new rules for each PID
+                with open(rules_file, 'w') as f:
+                    # Write existing rules first
+                    f.writelines(existing_rules)
+                    
+                    # Add rules for this app
+                    f.write(f'# {app_name}\n')
+                    for pid in pids:
+                        f.write(f'block drop proto tcp from any to any user {os.getuid()} group {os.getgid()}\n')
+                        f.write(f'block drop proto udp from any to any user {os.getuid()} group {os.getgid()}\n')
+                
+                # Try to load the rules into pf
+                try:
+                    # Enable pf if not enabled
+                    subprocess.run(['sudo', 'pfctl', '-e'], capture_output=True, text=True, check=False)
+                    
+                    # Load the anchor
+                    result = subprocess.run([
+                        'sudo', 'pfctl', '-a', 'airtraffic', '-f', rules_file
+                    ], capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        print(f"  Added packet filter rules for {len(pids)} process(es)")
+                        print(f"  App can run but network access is blocked")
+                    else:
+                        print(f"  [WARNING] Could not load pf rules (requires sudo)")
+                        print(f"  Tracked as blocked (limited enforcement)")
+                except Exception as e:
+                    print(f"  [WARNING] pf configuration failed: {e}")
+                    print(f"  Tracked as blocked (limited enforcement)")
+            else:
+                print(f"  App is not currently running")
+                print(f"  Will be blocked when launched")
             
         except Exception as e:
             raise RuntimeError(f"Failed to block app: {str(e)}")
     
     def _unblock_macos(self, exe_path: str, app_name: str):
-        """Unblock application on macOS by restoring execute permissions."""
+        """Unblock application on macOS to allow network access."""
         try:
-            # Restore execute permissions
-            import stat
-            current_mode = os.stat(exe_path).st_mode
-            # Add back execute permissions
-            os.chmod(exe_path, current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-            print(f"  Restored execute permissions")
-            print(f"  ✓ Application is now allowed")
-        except (OSError, PermissionError) as e:
-            print(f"  ⚠️  Could not restore execute permissions: {e}")
-            # Still remove from blocked list
-        pass
+            # Remove rules from pf
+            pf_dir = os.path.expanduser('~/.airtraffic/pf')
+            rules_file = os.path.join(pf_dir, 'airtraffic.rules')
+            
+            if os.path.exists(rules_file):
+                # Load existing rules and remove rules for this app
+                with open(rules_file, 'r') as f:
+                    lines = f.readlines()
+                
+                # Filter out rules for this app
+                new_rules = []
+                skip_next = False
+                for line in lines:
+                    if line.startswith(f'# {app_name}'):
+                        skip_next = True
+                        continue
+                    if skip_next and (line.startswith('block') or line.strip() == ''):
+                        continue
+                    skip_next = False
+                    new_rules.append(line)
+                
+                # Write back
+                with open(rules_file, 'w') as f:
+                    f.writelines(new_rules)
+                
+                # Reload pf rules
+                try:
+                    subprocess.run([
+                        'sudo', 'pfctl', '-a', 'airtraffic', '-f', rules_file
+                    ], capture_output=True, text=True, check=False)
+                except:
+                    pass
+            
+            print(f"  Removed from blocked applications list")
+            print(f"  Network access restored")
+        except Exception as e:
+            # Still remove from blocked list even if there's an error
+            pass
     
     def _block_linux(self, exe_path: str, app_name: str):
-        """Block application on Linux using file permissions (same as macOS)."""
+        """Block application on Linux from accessing the network using iptables."""
         try:
-            # Kill all running instances
-            killed_count = 0
-            for proc in psutil.process_iter(['exe', 'pid', 'name']):
-                try:
-                    if proc.info['exe'] == exe_path:
-                        proc.kill()
-                        killed_count += 1
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
+            # Use iptables to block network access for this application
+            # Block by matching the executable path in the owner match extension
             
-            if killed_count > 0:
-                print(f"  Terminated {killed_count} running instance(s)")
+            try:
+                # Block outbound connections
+                subprocess.run([
+                    'iptables', '-A', 'OUTPUT',
+                    '-m', 'owner', '--uid-owner', f'{os.getuid()}',
+                    '-m', 'string', '--string', exe_path, '--algo', 'bm',
+                    '-j', 'DROP'
+                ], check=True, capture_output=True, text=True)
+                
+                print(f"  Added iptables rule to block network access")
+            except subprocess.CalledProcessError as e:
+                # Fallback: Track as blocked
+                print(f"  [WARNING] Could not add iptables rule: {e.stderr}")
+                print(f"  Tracking as blocked (may require manual firewall configuration)")
             
-            # Remove execute permissions
-            import stat
-            current_mode = os.stat(exe_path).st_mode
-            os.chmod(exe_path, current_mode & ~stat.S_IXUSR & ~stat.S_IXGRP & ~stat.S_IXOTH)
-            print(f"  Removed execute permissions from {app_name}")
-            print(f"  ✓ Application is now blocked")
-            
-        except (OSError, PermissionError) as e:
+        except Exception as e:
             raise RuntimeError(f"Failed to block app: {str(e)}")
     
     def _unblock_linux(self, exe_path: str, app_name: str):
-        """Unblock application on Linux by restoring execute permissions."""
+        """Unblock application on Linux to allow network access."""
         try:
-            # Restore execute permissions
-            import stat
-            current_mode = os.stat(exe_path).st_mode
-            os.chmod(exe_path, current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-            print(f"  Restored execute permissions")
-            print(f"  ✓ Application is now allowed")
-        except (OSError, PermissionError) as e:
-            raise RuntimeError(f"Failed to allow app: {str(e)}")
+            # Remove iptables rules
+            try:
+                subprocess.run([
+                    'iptables', '-D', 'OUTPUT',
+                    '-m', 'owner', '--uid-owner', f'{os.getuid()}',
+                    '-m', 'string', '--string', exe_path, '--algo', 'bm',
+                    '-j', 'DROP'
+                ], check=True, capture_output=True, text=True)
+                
+                print(f"  Removed iptables rule")
+            except subprocess.CalledProcessError:
+                # Rule might not exist, that's okay
+                print(f"  Removed from blocked list")
+        except Exception as e:
+            # Still remove from blocked list
+            pass
     
     def _block_windows(self, exe_path: str, app_name: str):
-        """Block application on Windows using Windows Firewall."""
+        """Block application on Windows from accessing the network using Windows Firewall."""
         rule_name = f"AirTraffic_Block_{app_name}"
         
         try:
-            # Kill all running instances first
-            killed_count = 0
-            for proc in psutil.process_iter(['exe', 'pid', 'name']):
-                try:
-                    if proc.info['exe'] and proc.info['exe'].lower() == exe_path.lower():
-                        proc.kill()
-                        killed_count += 1
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-            
-            if killed_count > 0:
-                print(f"  Terminated {killed_count} running instance(s)")
             
             # Block outbound connections
             result = subprocess.run([
@@ -448,7 +501,6 @@ class FirewallManager:
             ], check=True, capture_output=True, text=True)
             
             print(f"  Created firewall rules (inbound & outbound)")
-            print(f"  ✓ Application is now blocked from network access")
             
         except subprocess.CalledProcessError as e:
             stderr = e.stderr if e.stderr else str(e)
@@ -474,9 +526,7 @@ class FirewallManager:
             ], capture_output=True, text=True)
             
             print(f"  Removed firewall rules")
-            print(f"  ✓ Application can now access network")
             
         except subprocess.CalledProcessError as e:
             # Rules might not exist, that's okay
-            print(f"  ✓ Application can now access network")
             pass

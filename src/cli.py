@@ -367,7 +367,7 @@ def live_monitor(interval: int = 2):
             
             # Show privilege warning in header if not elevated
             if not check_elevated_privileges():
-                print("⚠️  WARNING: Limited mode - run with sudo for full stats")
+                print("[WARNING] Limited mode - run with sudo for full stats")
             
             print()
             
@@ -440,7 +440,7 @@ def uninstall_service():
     
     if os.path.exists(data_dir):
         shutil.rmtree(data_dir)
-        print(f"   ✓ Removed {data_dir}")
+        print(f"   Removed {data_dir}")
     else:
         print(f"   No data directory found")
     
@@ -449,12 +449,12 @@ def uninstall_service():
     try:
         subprocess.run([sys.executable, '-m', 'pip', 'uninstall', '-y', 'airtraffic'], 
                       check=True, capture_output=True)
-        print("   ✓ Package uninstalled")
+        print("   Package uninstalled")
     except subprocess.CalledProcessError:
-        print("   ✓ Package already uninstalled or not found")
+        print("   Package already uninstalled or not found")
     
     print("\n" + "=" * 50)
-    print("✓ AirTraffic completely removed!")
+    print("AirTraffic completely removed!")
     print("=" * 50)
 
 
@@ -485,8 +485,8 @@ WantedBy=multi-user.target
     os.system("systemctl --user daemon-reload")
     os.system("systemctl --user enable airtraffic.service")
     os.system("systemctl --user start airtraffic.service")
-    print("✓ Service installed and started!")
-    print("  The daemon will now start automatically on boot.")
+    print("Service installed and started!")
+    print("The daemon will now start automatically on boot.")
 
 
 def uninstall_systemd_service():
@@ -500,7 +500,7 @@ def uninstall_systemd_service():
         os.remove(service_path)
     
     os.system("systemctl --user daemon-reload")
-    print("✓ Service uninstalled!")
+    print("Service uninstalled!")
 
 
 def install_launchd_service():
@@ -561,8 +561,8 @@ def install_launchd_service():
     # Give it a moment to start
     time.sleep(2)
     
-    print("✓ Service installed and started!")
-    print("  The daemon is now running and will start automatically on boot.")
+    print("Service installed and started!")
+    print("The daemon is now running and will start automatically on boot.")
 
 
 def uninstall_launchd_service():
@@ -580,7 +580,7 @@ def uninstall_launchd_service():
     if os.path.exists(plist_path):
         os.remove(plist_path)
     
-    print("✓ Service uninstalled!")
+    print("Service uninstalled!")
 
 
 def install_windows_service():
@@ -634,12 +634,12 @@ def install_windows_service():
         # Give it a moment to start
         time.sleep(2)
         
-        print("✓ Service installed and started!")
-        print("  The daemon is now running and will start automatically on login.")
-        print(f"  Data directory: {airtraffic_dir}")
+        print("Service installed and started!")
+        print("The daemon is now running and will start automatically on login.")
+        print(f"Data directory: {airtraffic_dir}")
         
     except subprocess.CalledProcessError as e:
-        print(f"✗ Failed to install service: {e}")
+        print(f"[FAILED] Failed to install service: {e}")
         print("  You may need to run this command as Administrator.")
         print("  Alternatively, you can manually start the daemon with: airtraffic start")
 
@@ -659,7 +659,7 @@ def uninstall_windows_service():
         subprocess.run(['schtasks', '/Delete', '/TN', task_name, '/F'], 
                       capture_output=True, check=False)
         
-        print("✓ Service uninstalled!")
+        print("Service uninstalled!")
         
     except Exception as e:
         print(f"Note: {e}")
