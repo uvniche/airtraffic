@@ -1,0 +1,171 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+% Use Inter font - must come before theme
+\usepackage{fontspec}
+\setmainfont{Inter}
+\setsansfont{Inter}
+\setmonofont{Inter}
+
+\usetheme{Madrid}
+
+% Change color scheme from blue to black - AFTER theme is loaded
+\setbeamercolor{structure}{fg=black}
+\setbeamercolor{palette primary}{bg=black,fg=white}
+\setbeamercolor{palette secondary}{bg=black!90,fg=white}
+\setbeamercolor{palette tertiary}{bg=black!80,fg=white}
+\setbeamercolor{palette quaternary}{bg=black!70,fg=white}
+\setbeamercolor{titlelike}{bg=black,fg=white}
+\setbeamercolor{frametitle}{bg=black,fg=white}
+\setbeamercolor{block title}{bg=black!90,fg=white}
+\setbeamercolor{block body}{bg=black!5,fg=black}
+\setbeamercolor{item}{fg=black}
+\setbeamercolor{subitem}{fg=black}
+\setbeamercolor{subsubitem}{fg=black}
+\setbeamercolor{section in head/foot}{bg=black,fg=white}
+\setbeamercolor{subsection in head/foot}{bg=black!90,fg=white}
+\setbeamercolor{author in head/foot}{bg=black,fg=white}
+\setbeamercolor{title in head/foot}{bg=black!90,fg=white}
+\setbeamercolor{date in head/foot}{bg=black!80,fg=white}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+
+\title{AirTraffic}
+\subtitle{CLI Network Tool}
+\author{Athul Noble \\ Avaneesh Rao \\ Jayesh Patil}
+\date{}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+%------------------------------------------------------------------------------
+\section{Overview}
+\begin{frame}{What is AirTraffic?}
+  \textbf{Cross-platform CLI} for:
+  \begin{itemize}
+    \item \textbf{Monitoring} network usage per application (live \& historical)
+    \item \textbf{Blocking / allowing} apps from using the network
+  \end{itemize}
+  \vspace{0.5em}
+  \textbf{Platforms:} macOS, Linux, Windows \\
+  \textbf{Stack:} Python 3.7+, \texttt{psutil}, SQLite
+\end{frame}
+
+%------------------------------------------------------------------------------
+\section{Features}
+\begin{frame}{Features}
+  \textbf{Monitor Network Usage}
+  \begin{itemize}
+    \item Live dashboard with \texttt{airtraffic live}
+    \item Historical usage with \texttt{airtraffic since today/month}
+  \end{itemize}
+  
+  \vspace{1em}
+  \textbf{Block or Allow Apps}
+  \begin{itemize}
+    \item Control individual apps or all apps at once
+    \item Commands: \texttt{block}, \texttt{allow}, \texttt{blocked}, \texttt{allowed}
+  \end{itemize}
+  
+  \vspace{1em}
+  \textbf{Background Service}
+  \begin{itemize}
+    \item Automatically collects stats every 60 seconds
+    \item Easy \texttt{install} and \texttt{uninstall} commands
+  \end{itemize}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\section{Architecture}
+\begin{frame}{Architecture}
+  \begin{center}
+    \begin{tabular}{ll}
+      \textbf{Module} & \textbf{What it does} \\
+      \hline
+      \texttt{cli.py} & Handles commands you type \\
+      \texttt{daemon.py} & Runs in background, checks network every 60s \\
+      \texttt{monitor.py} & Tracks which app uses how much data \\
+      \texttt{database.py} & Stores and retrieves usage history \\
+      \texttt{firewall.py} & Blocks or allows apps from using internet \\
+    \end{tabular}
+  \end{center}
+\end{frame}
+
+\begin{frame}{How blocking works}
+  \textbf{Windows:}
+  \begin{itemize}
+    \item Uses built-in firewall to block apps
+    \item Block = add firewall rule, Allow = remove firewall rule
+  \end{itemize}
+  
+  \vspace{0.5em}
+  \textbf{macOS / Linux:}
+  \begin{itemize}
+    \item No built-in per-app firewall, so we prevent the app from running
+    \item Block = kill app + remove permission to run
+    \item Allow = restore permission to run
+  \end{itemize}
+  
+  \vspace{0.5em}
+  \textit{Note: Needs admin/sudo to modify firewall or file permissions}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\section{Data flow}
+\begin{frame}{How it works}
+  \textbf{Background daemon (after install):}
+  \begin{itemize}
+    \item Checks network usage every 60 seconds
+    \item Figures out which app used how much data
+    \item Saves everything to a database
+  \end{itemize}
+  
+  \vspace{0.5em}
+  \textbf{When you run ``airtraffic since today'':}
+  \begin{itemize}
+    \item Reads the database
+    \item Adds up all data since midnight
+    \item Shows you the totals per app
+  \end{itemize}
+  
+  \vspace{0.5em}
+  \textbf{When you run ``airtraffic live'':}
+  \begin{itemize}
+    \item Monitors network in real-time (no database needed)
+    \item Updates the screen every few seconds
+  \end{itemize}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\section{Install \& usage}
+\begin{frame}[fragile]{Install \& usage}
+  \textbf{Install:}
+  \begin{verbatim}
+pip install -e .
+airtraffic install   (sudo / Admin)
+  \end{verbatim}
+  \textbf{Common commands:}
+  \begin{verbatim}
+airtraffic live
+airtraffic since today | month | "dd:mm:yyyy hh:mm:ss"
+sudo airtraffic block Chrome | allow Chrome | block all | allow all
+airtraffic blocked | allowed
+airtraffic uninstall
+  \end{verbatim}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\section{Summary}
+\begin{frame}{Summary}
+  \begin{itemize}
+    \item AirTraffic = \textbf{monitor} (live + since) + \textbf{firewall} (block/allow per app) via a single CLI.
+    \item Daemon persists stats to SQLite; CLI reads for ``since'' queries.
+    \item Cross-platform: Windows uses firewall rules; macOS/Linux use execute-bit blocking.
+    \item One-time \texttt{install} sets up launchd (macOS), systemd user (Linux), or Task Scheduler (Windows).
+  \end{itemize}
+\end{frame}
+
+\end{document}
