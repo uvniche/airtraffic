@@ -1,4 +1,4 @@
-\documentclass[aspectratio=169,11pt]{beamer}
+\documentclass[aspectratio=169,12pt]{beamer}
 
 % Use Inter font - must come before theme
 \usepackage{fontspec}
@@ -28,7 +28,24 @@
 \setbeamercolor{date in head/foot}{bg=black!80,fg=white}
 
 \setbeamertemplate{navigation symbols}{}
-\setbeamertemplate{footline}[frame number]
+\setbeamertemplate{footline}{
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=\paperwidth,ht=2.5ex,dp=1ex,right]{white}%
+      \usebeamerfont{date in head/foot}
+      \textcolor{black}{\insertframenumber{} / \inserttotalframenumber}\hspace*{2ex}
+    \end{beamercolorbox}%
+  }%
+  \vskip0pt%
+}
+
+% Set all fonts to 12pt (including titles and headings) and make them bold
+\setbeamerfont{title}{size=\fontsize{12}{14},series=\bfseries}
+\setbeamerfont{subtitle}{size=\fontsize{12}{14},series=\bfseries}
+\setbeamerfont{author}{size=\fontsize{12}{14},series=\bfseries}
+\setbeamerfont{frametitle}{size=\fontsize{12}{14},series=\bfseries}
+\setbeamerfont{framesubtitle}{size=\fontsize{12}{14},series=\bfseries}
+\setbeamerfont{block title}{size=\fontsize{12}{14},series=\bfseries}
 
 \title{AirTraffic}
 \subtitle{CLI Network Tool}
@@ -57,24 +74,19 @@
 %------------------------------------------------------------------------------
 \section{Features}
 \begin{frame}{Features}
-  \textbf{Monitor Network Usage}
+  \textbf{1. Monitor Network Usage}
   \begin{itemize}
-    \item Live dashboard with \texttt{airtraffic live}
-    \item Historical usage with \texttt{airtraffic since today/month}
+    \item Real-time dashboard with live statistics
+    \item Historical usage tracking since any point in time
+    \item Per-application bandwidth breakdown
   \end{itemize}
   
   \vspace{1em}
-  \textbf{Block or Allow Apps}
+  \textbf{2. Block/Allow Applications}
   \begin{itemize}
-    \item Control individual apps or all apps at once
-    \item Commands: \texttt{block}, \texttt{allow}, \texttt{blocked}, \texttt{allowed}
-  \end{itemize}
-  
-  \vspace{1em}
-  \textbf{Background Service}
-  \begin{itemize}
-    \item Automatically collects stats every 60 seconds
-    \item Easy \texttt{install} and \texttt{uninstall} commands
+    \item Block specific apps or all running apps
+    \item Allow previously blocked apps
+    \item List blocked and allowed applications
   \end{itemize}
 \end{frame}
 
@@ -94,78 +106,80 @@
   \end{center}
 \end{frame}
 
-\begin{frame}{How blocking works}
-  \textbf{Windows:}
+%------------------------------------------------------------------------------
+\section{How It Works}
+\begin{frame}{How It Works: Monitoring}
+  \textbf{Monitoring Network Usage:}
   \begin{itemize}
-    \item Uses built-in firewall to block apps
-    \item Block = add firewall rule, Allow = remove firewall rule
+    \item Background daemon checks network every 60s using \texttt{psutil}
+    \item Tracks bytes sent/received per process (maps PIDs to apps)
+    \item Stores historical data in SQLite database
+    \item Live mode: real-time monitoring without database
+    \item Historical mode: queries database and aggregates usage
   \end{itemize}
-  
-  \vspace{0.5em}
-  \textbf{macOS / Linux:}
-  \begin{itemize}
-    \item No built-in per-app firewall, so we prevent the app from running
-    \item Block = kill app + remove permission to run
-    \item Allow = restore permission to run
-  \end{itemize}
-  
-  \vspace{0.5em}
-  \textit{Note: Needs admin/sudo to modify firewall or file permissions}
 \end{frame}
 
-%------------------------------------------------------------------------------
-\section{Data flow}
-\begin{frame}{How it works}
-  \textbf{Background daemon (after install):}
+\begin{frame}{How It Works: Blocking Applications}
+  \textbf{Blocking Applications:}
   \begin{itemize}
-    \item Checks network usage every 60 seconds
-    \item Figures out which app used how much data
-    \item Saves everything to a database
-  \end{itemize}
-  
-  \vspace{0.5em}
-  \textbf{When you run ``airtraffic since today'':}
-  \begin{itemize}
-    \item Reads the database
-    \item Adds up all data since midnight
-    \item Shows you the totals per app
-  \end{itemize}
-  
-  \vspace{0.5em}
-  \textbf{When you run ``airtraffic live'':}
-  \begin{itemize}
-    \item Monitors network in real-time (no database needed)
-    \item Updates the screen every few seconds
+    \item \textbf{macOS:} Uses \texttt{socketfilterfw} (Application Firewall) -- blocks at kernel level
+    \item \textbf{Linux:} Uses \texttt{iptables}/\texttt{nftables} with command matching -- automatic fallback
+    \item \textbf{Windows:} Uses \texttt{netsh advfirewall} to create inbound/outbound block rules
+    \item All methods block at OS level -- apps cannot bypass
+    \item Works reliably across all platforms with improved error handling
   \end{itemize}
 \end{frame}
 
 %------------------------------------------------------------------------------
 \section{Install \& usage}
-\begin{frame}[fragile]{Install \& usage}
+\begin{frame}[fragile]{Installation}
   \textbf{Install:}
   \begin{verbatim}
 pip install -e .
-airtraffic install   (sudo / Admin)
+sudo airtraffic install   # Starts background daemon
   \end{verbatim}
-  \textbf{Commands:}
+  
+  \vspace{1em}
+  \textbf{Uninstall:}
+  \begin{verbatim}
+sudo airtraffic uninstall   # Stops daemon & removes service
+  \end{verbatim}
+\end{frame}
+
+\begin{frame}{Usage: Monitoring}
+  \textbf{Monitor Network Usage:}
   \begin{itemize}
-    \item \texttt{airtraffic live} -- Shows real-time network usage
-    \item \texttt{airtraffic since today | month} -- Shows historical usage
-    \item \texttt{sudo airtraffic block <app>} -- Blocks app from network
-    \item \texttt{sudo airtraffic allow <app>} -- Allows app to use network
-    \item \texttt{airtraffic blocked | allowed} -- Lists blocked/allowed apps
-    \item \texttt{airtraffic uninstall} -- Removes background service
+    \item \texttt{sudo airtraffic live} -- Real-time dashboard
+    \item \texttt{airtraffic since today} -- Usage since today 12:00 AM
+    \item \texttt{airtraffic since month} -- Usage since first of month 12:00 AM
+    \item \texttt{airtraffic since "17:01:2026 14:30:00"} -- Custom date/time (dd:mm:yyyy hh:mm:ss)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Usage: Block/Allow Apps}
+  \textbf{Block/Allow Apps:}
+  \begin{itemize}
+    \item \texttt{sudo airtraffic block Application} -- Block app from accessing network
+    \item \texttt{sudo airtraffic allow Application} -- Allow app to access network
+    \item \texttt{sudo airtraffic block all} -- Block all running apps
+    \item \texttt{sudo airtraffic allow all} -- Allow all blocked apps
+    \item \texttt{airtraffic blocked} -- List blocked applications
+    \item \texttt{airtraffic allowed} -- List allowed applications
   \end{itemize}
 \end{frame}
 
 %------------------------------------------------------------------------------
 \section{Summary}
 \begin{frame}{Summary}
+  AirTraffic is a cross-platform CLI tool for monitoring and controlling network access per application.
+  
+  \vspace{1em}
   \begin{itemize}
-    \item AirTraffic lets you see which apps use your internet and control their access - all from one simple tool.
-    \item A background service saves your network history so you can check past usage anytime.
-    \item Works on all platforms: Windows blocks apps using its firewall; Mac/Linux stop apps from running.
-    \item One-time setup makes the background service start automatically when you turn on your computer.
+    \item Monitor network usage in real-time or historically
+    \item Block applications from accessing the network without closing them
+    \item Works on macOS, Linux, and Windows using native OS firewalls
+    \item Background daemon tracks usage continuously
+    \item Simple commands for complete network control
   \end{itemize}
 \end{frame}
 

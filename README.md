@@ -22,11 +22,17 @@ airtraffic since "17:01:2026 14:30:00" # Show usage since custom date/time (dd:m
 
 ### Allow/Block Applications Network Access
 
+**macOS**: Uses Application Firewall (`socketfilterfw`) to block apps at the kernel level  
+**Linux**: Uses `iptables`/`nftables` to block network traffic  
+**Windows**: Uses Windows Firewall (`netsh`) to block network traffic
+
+Works reliably across all platforms with automatic fallback methods.
+
 ```bash
-airtraffic block Application           # macOS/Linux: use sudo | Windows: run as Administrator
-airtraffic allow Application           # macOS/Linux: use sudo | Windows: run as Administrator
-airtraffic block all                   # macOS/Linux: use sudo | Windows: run as Administrator
-airtraffic allow all                   # macOS/Linux: use sudo | Windows: run as Administrator
+sudo airtraffic block Application      # Block app from accessing network (requires sudo/admin)
+sudo airtraffic allow Application      # Allow app to access network (requires sudo/admin)
+sudo airtraffic block all              # Block all running apps (requires sudo/admin)
+sudo airtraffic allow all              # Allow all blocked apps (requires sudo/admin)
 airtraffic blocked                     # List blocked applications
 airtraffic allowed                     # List allowed applications
 ```
