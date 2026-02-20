@@ -9,7 +9,7 @@ description = "A cross-platform network monitoring tool for macOS, Linux, and Wi
 readme = "README.md"
 requires-python = ">=3.7"
 authors = [
-    {name = "uvniche"}
+    {name = "Avaneesh Rao"}
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -21,9 +21,6 @@ classifiers = [
 dependencies = [
     "psutil>=5.9.0",
 ]
-
-[project.urls]
-Homepage = "https://github.com/uvniche/airtraffic"
 
 [project.scripts]
 airtraffic = "airtraffic.cli:main"

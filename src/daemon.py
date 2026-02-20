@@ -8,7 +8,6 @@ import psutil
 from datetime import datetime
 from airtraffic.monitor import NetworkMonitor
 from airtraffic.database import NetworkDatabase
-from airtraffic.firewall import FirewallManager
 
 
 class AirTrafficDaemon:
@@ -23,7 +22,6 @@ class AirTrafficDaemon:
         self.interval = interval
         self.monitor = NetworkMonitor()
         self.database = NetworkDatabase()
-        self.firewall = FirewallManager()
         self.running = False
         
         # Set up signal handlers (Windows supports SIGINT, but not SIGTERM)
