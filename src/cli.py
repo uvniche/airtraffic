@@ -136,7 +136,7 @@ def display_historical_stats(stats: dict, title: str, period: str):
         if AirTrafficDaemon().get_pid() is not None:
             print("The app is running; data will appear after it has been collecting for a while.")
         else:
-            print("Run 'airtraffic install' to install and start the app.")
+            print("Run 'airtraffic run' to install and start the app.")
         return
     
     # Sort by total traffic
@@ -343,8 +343,7 @@ def _ensure_package_installed():
 
 
 def install_service():
-    """Install AirTraffic as a system service."""
-    _ensure_package_installed()
+    """Install AirTraffic as a system service (assumes package already installed via pip install -e .)."""
     system = platform.system()
 
     if system == "Darwin":  # macOS
@@ -355,57 +354,40 @@ def install_service():
         install_windows_service()
     else:
         print(f"Service installation not supported on {system}")
+        return
+    print("AirTraffic is running.")
 
 
 def uninstall_service():
     """Completely uninstall AirTraffic - service, data, and package."""
     import shutil
     import subprocess
-    
-    print("Uninstalling AirTraffic...")
-    print()
-    
+
     system = platform.system()
-    
-    # Step 1: Stop and remove service
-    print("1. Stopping and removing service...")
     daemon = AirTrafficDaemon()
-    daemon.stop()
-    
-    if system == "Darwin":  # macOS
+    daemon.stop(quiet=True)
+
+    if system == "Darwin":
         uninstall_launchd_service()
     elif system == "Linux":
         uninstall_systemd_service()
     elif system == "Windows":
         uninstall_windows_service()
-    else:
-        print(f"   Service uninstallation not supported on {system}")
-    
-    # Step 2: Remove all data
-    print("\n2. Removing all data...")
+
     if system == "Windows":
         data_dir = os.path.join(os.getenv('APPDATA'), 'AirTraffic')
     else:
         data_dir = os.path.expanduser('~/.airtraffic')
-    
     if os.path.exists(data_dir):
         shutil.rmtree(data_dir)
-        print(f"   Removed {data_dir}")
-    else:
-        print(f"   No data directory found")
-    
-    # Step 3: Uninstall package
-    print("\n3. Uninstalling package...")
+
     try:
-        subprocess.run([sys.executable, '-m', 'pip', 'uninstall', '-y', 'airtraffic'], 
+        subprocess.run([sys.executable, '-m', 'pip', 'uninstall', '-y', 'airtraffic'],
                       check=True, capture_output=True)
-        print("   Package uninstalled")
     except subprocess.CalledProcessError:
-        print("   Package already uninstalled or not found")
-    
-    print("\n" + "=" * 50)
-    print("AirTraffic completely removed!")
-    print("=" * 50)
+        pass
+
+    print("AirTraffic uninstalled.")
 
 
 def install_systemd_service():
@@ -431,26 +413,19 @@ WantedBy=multi-user.target
     with open(service_path, 'w') as f:
         f.write(service_content)
     
-    print("Installing systemd service...")
     os.system("systemctl --user daemon-reload")
     os.system("systemctl --user enable airtraffic.service")
     os.system("systemctl --user start airtraffic.service")
-    print("Service installed and started!")
-    print("The daemon will now start automatically on boot.")
 
 
 def uninstall_systemd_service():
     """Uninstall systemd service on Linux."""
-    print("Uninstalling systemd service...")
     os.system("systemctl --user stop airtraffic.service")
     os.system("systemctl --user disable airtraffic.service")
-    
     service_path = os.path.expanduser("~/.config/systemd/user/airtraffic.service")
     if os.path.exists(service_path):
         os.remove(service_path)
-    
     os.system("systemctl --user daemon-reload")
-    print("Service uninstalled!")
 
 
 def install_launchd_service():
@@ -506,10 +481,7 @@ def install_launchd_service():
     domain = f"gui/{os.getuid()}" if os.getenv('SUDO_USER') else f"gui/{os.getuid()}"
     os.system(f"launchctl bootstrap {domain} {plist_path} >/dev/null 2>&1 || launchctl load {plist_path} >/dev/null 2>&1")
     
-    # Give it a moment to start
     time.sleep(2)
-    
-    print("AirTraffic installed.")
 
 
 def uninstall_launchd_service():
@@ -517,24 +489,15 @@ def uninstall_launchd_service():
     actual_user = os.getenv('SUDO_USER') or os.getenv('USER')
     user_home = os.path.expanduser(f"~{actual_user}")
     plist_path = f"{user_home}/Library/LaunchAgents/com.airtraffic.daemon.plist"
-    
-    print("Uninstalling launchd service...")
-    
-    # Try both bootstrap and unload methods
     domain = f"gui/{os.getuid()}"
     os.system(f"launchctl bootout {domain} {plist_path} 2>/dev/null || launchctl unload {plist_path} 2>/dev/null")
-    
     if os.path.exists(plist_path):
         os.remove(plist_path)
-    
-    print("Service uninstalled!")
 
 
 def install_windows_service():
     """Install Windows Task Scheduler service."""
     import subprocess
-    
-    print("Installing Windows Task Scheduler service...")
     
     # Get the Python executable and script path
     python_exe = sys.executable
@@ -578,38 +541,25 @@ def install_windows_service():
         subprocess.run(['schtasks', '/Run', '/TN', task_name], 
                       check=True, capture_output=True)
         
-        # Give it a moment to start
         time.sleep(2)
-        
-        print("Service installed and started!")
-        print("The daemon is now running and will start automatically on login.")
-        print(f"Data directory: {airtraffic_dir}")
-        
+
     except subprocess.CalledProcessError as e:
         print(f"[FAILED] Failed to install service: {e}")
-        print("  You may need to run this command as Administrator.")
-        print("  Run 'airtraffic install' as Administrator to install and start the app.")
+        print("  Run 'airtraffic run' as Administrator to install and start the app.")
+        raise
 
 
 def uninstall_windows_service():
     """Uninstall Windows Task Scheduler service."""
     import subprocess
-    
-    print("Uninstalling Windows Task Scheduler service...")
-    
     task_name = "AirTrafficDaemon"
-    
     try:
-        # Stop and delete the scheduled task
-        subprocess.run(['schtasks', '/End', '/TN', task_name], 
+        subprocess.run(['schtasks', '/End', '/TN', task_name],
                       capture_output=True, check=False)
-        subprocess.run(['schtasks', '/Delete', '/TN', task_name, '/F'], 
+        subprocess.run(['schtasks', '/Delete', '/TN', task_name, '/F'],
                       capture_output=True, check=False)
-        
-        print("Service uninstalled!")
-        
-    except Exception as e:
-        print(f"Note: {e}")
+    except Exception:
+        pass
 
 
 def main():
@@ -617,7 +567,7 @@ def main():
     if len(sys.argv) < 2:
         print("AirTraffic - CLI Network Tool")
         print("\nUsage:")
-        print("  airtraffic install            Install and start app")
+        print("  airtraffic run                Install and start app")
         print("  airtraffic uninstall          Stop and uninstall app")
         print("  airtraffic status             Show if app is running")
         print("  airtraffic since <timespec>   Show network usage since specified time")
@@ -638,7 +588,7 @@ def main():
     if command in ['-h', '--help', 'help']:
         print("AirTraffic - CLI Network Tool")
         print("\nCommands:")
-        print("  install              Install app (auto-start on boot)")
+        print("  run                  Install and start app (auto-start on boot)")
         print("  uninstall            Remove app and stop monitoring")
         print("  status               Show if app is running (and uptime)")
         print("  since <timespec>     Show network usage since specified time")
@@ -654,7 +604,7 @@ def main():
         print("Use 'since' to view historical usage from any point in time.")
         sys.exit(0)
     
-    elif command == 'install':
+    elif command in ('run', 'install'):
         install_service()
 
     elif command == 'uninstall':

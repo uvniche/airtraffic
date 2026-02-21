@@ -34,61 +34,103 @@ class AirTrafficDaemon:
         print(f"\nReceived signal {signum}, shutting down gracefully...")
         self.running = False
     
-    def _get_pid_file(self) -> str:
-        """Get path to PID file."""
+    def _get_system_pid_file(self) -> str | None:
+        """Return system-wide PID file path (Unix, when running as root). None on Windows."""
         import platform
-        
+        if platform.system() != 'Windows':
+            return '/var/run/airtraffic/daemon.pid'
+        return None
+
+    def _get_pid_file(self) -> str:
+        """Get path to PID file for current process (where we write our PID)."""
+        import platform
+
         if platform.system() == 'Windows':
             pid_dir = os.path.join(os.getenv('APPDATA'), 'AirTraffic')
         else:
-            pid_dir = os.path.expanduser('~/.airtraffic')
-        
+            # When running as root, use system-wide path so status/stop work for all users
+            if os.geteuid() == 0:
+                pid_dir = '/var/run/airtraffic'
+            else:
+                pid_dir = os.path.expanduser('~/.airtraffic')
+
         os.makedirs(pid_dir, exist_ok=True)
+        if pid_dir == '/var/run/airtraffic':
+            try:
+                os.chmod(pid_dir, 0o755)
+            except OSError:
+                pass
         return os.path.join(pid_dir, 'daemon.pid')
-    
+
+    def _pid_file_candidates(self) -> list[str]:
+        """Return list of PID file paths to check (system first, then user)."""
+        import platform
+        if platform.system() == 'Windows':
+            return [self._get_pid_file()]
+        candidates = []
+        system_path = self._get_system_pid_file()
+        if system_path:
+            candidates.append(system_path)
+        candidates.append(os.path.expanduser('~/.airtraffic/daemon.pid'))
+        return candidates
+
+    def _remove_pid_file(self, path: str) -> None:
+        """Remove a specific PID file if it exists."""
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
     def _write_pid(self):
         """Write PID to file."""
         pid_file = self._get_pid_file()
         with open(pid_file, 'w') as f:
             f.write(str(os.getpid()))
-    
+        # When running as root, make readable so non-root 'airtraffic status' can find the daemon
+        if hasattr(os, 'geteuid') and os.geteuid() == 0:
+            try:
+                os.chmod(pid_file, 0o644)
+            except OSError:
+                pass
+
     def _remove_pid(self):
-        """Remove PID file."""
+        """Remove PID file(s) for this daemon (current process location)."""
         pid_file = self._get_pid_file()
-        if os.path.exists(pid_file):
-            os.remove(pid_file)
+        self._remove_pid_file(pid_file)
     
     def is_running(self) -> bool:
         """Check if daemon is already running."""
         return self.get_pid() is not None
 
     def get_pid(self):
-        """Return daemon PID if running, else None."""
+        """Return daemon PID if running, else None. Checks system PID file first (e.g. when run with sudo)."""
         import platform
-        pid_file = self._get_pid_file()
-
-        if not os.path.exists(pid_file):
-            return None
-
-        try:
-            with open(pid_file, 'r') as f:
-                pid = int(f.read().strip())
+        for pid_file in self._pid_file_candidates():
+            if not os.path.exists(pid_file):
+                continue
+            try:
+                with open(pid_file, 'r') as f:
+                    pid = int(f.read().strip())
+            except (OSError, ValueError):
+                self._remove_pid_file(pid_file)
+                continue
 
             # Check if process exists
-            if platform.system() == 'Windows':
-                import subprocess
-                result = subprocess.run(['tasklist', '/FI', f'PID eq {pid}'],
-                                      capture_output=True, text=True)
-                if str(pid) in result.stdout:
+            try:
+                if platform.system() == 'Windows':
+                    import subprocess
+                    result = subprocess.run(['tasklist', '/FI', f'PID eq {pid}'],
+                                          capture_output=True, text=True)
+                    if str(pid) in result.stdout:
+                        return pid
+                else:
+                    os.kill(pid, 0)
                     return pid
-                self._remove_pid()
-                return None
-            else:
-                os.kill(pid, 0)
-                return pid
-        except (OSError, ValueError):
-            self._remove_pid()
-            return None
+            except (OSError, psutil.AccessDenied):
+                pass
+            self._remove_pid_file(pid_file)
+        return None
     
     def start(self):
         """Start the daemon."""
@@ -125,52 +167,52 @@ class AirTrafficDaemon:
             self._remove_pid()
             print("Daemon stopped.")
     
-    def stop(self):
+    def stop(self, quiet: bool = False):
         """Stop the daemon."""
         import platform
-        pid_file = self._get_pid_file()
-        
-        if not os.path.exists(pid_file):
-            print("AirTraffic daemon is not running.")
+        pid = self.get_pid()
+        if pid is None:
+            if not quiet:
+                print("AirTraffic daemon is not running.")
             return
-        
+
         try:
-            with open(pid_file, 'r') as f:
-                pid = int(f.read().strip())
-            
-            print(f"Stopping AirTraffic daemon (PID: {pid})...")
-            
+            if not quiet:
+                print(f"Stopping AirTraffic daemon (PID: {pid})...")
+
             if platform.system() == 'Windows':
-                # On Windows, use taskkill
                 import subprocess
-                subprocess.run(['taskkill', '/PID', str(pid), '/F'], 
+                subprocess.run(['taskkill', '/PID', str(pid), '/F'],
                              capture_output=True, check=False)
             else:
-                # On Unix, use SIGTERM
                 os.kill(pid, signal.SIGTERM)
-            
+
             # Wait for process to stop
             for _ in range(10):
                 if platform.system() == 'Windows':
                     import subprocess
-                    result = subprocess.run(['tasklist', '/FI', f'PID eq {pid}'], 
+                    result = subprocess.run(['tasklist', '/FI', f'PID eq {pid}'],
                                           capture_output=True, text=True)
                     if str(pid) not in result.stdout:
                         break
                 else:
                     try:
                         os.kill(pid, 0)
-                        time.sleep(0.5)
                     except OSError:
                         break
                 time.sleep(0.5)
-            
-            self._remove_pid()
-            print("Daemon stopped.")
-            
+
+            # Remove both possible PID files so next start is clean
+            for path in self._pid_file_candidates():
+                self._remove_pid_file(path)
+            if not quiet:
+                print("Daemon stopped.")
+
         except (OSError, ValueError) as e:
-            print(f"Error stopping daemon: {e}")
-            self._remove_pid()
+            if not quiet:
+                print(f"Error stopping daemon: {e}")
+            for path in self._pid_file_candidates():
+                self._remove_pid_file(path)
     
 
 

@@ -4,16 +4,23 @@ CLI Network Tool
 
 ## Install
 
+
 ```bash
-airtraffic install   # macOS/Linux: use sudo | Windows: run as Administrator
-```
+pip install -e .     # macOS/Linux: use sudo | Windows: run as Administrator
+```  
 
 ## Usage
 
-### Monitor Network Usage
+### Run & status
 
 ```bash
-airtraffic status                      # Show if app is running (and uptime)
+airtraffic run       # (macOS/Linux: use sudo | Windows: run as Administrator)
+airtraffic status    # Show if app is running (and uptime)
+```
+
+### Monitor network usage
+
+```bash
 airtraffic live                        # macOS/Linux: use sudo | Windows: run as Administrator
 airtraffic since today                 # Show usage since today 12:00 AM
 airtraffic since month                 # Show usage since first of month 12:00 AM
