@@ -38,7 +38,7 @@ env/
 *.swo
 *~
 
-# Cursor (optional: remove if you want to commit rules)
+# Cursor
 .cursor/
 
 # Testing / coverage
@@ -48,7 +48,13 @@ htmlcov/
 .tox/
 .nox/
 
+# Type checkers / linters
+.mypy_cache/
+.ruff_cache/
+
 # Misc
 *.log
 .env
 .env.local
+pip-log.txt
+pip-delete-this-directory.txt
