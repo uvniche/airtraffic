@@ -116,8 +116,10 @@ class NetworkMonitor:
                 if time_delta > 0:
                     sent_rate = (current_stats['bytes_sent'] - self.last_stats['bytes_sent']) / time_delta
                     recv_rate = (current_stats['bytes_recv'] - self.last_stats['bytes_recv']) / time_delta
-                    
-                    # Distribute rates among active apps proportionally
+                    # Delta bytes (for recording total in this interval)
+                    sent_delta = current_stats['bytes_sent'] - self.last_stats['bytes_sent']
+                    recv_delta = current_stats['bytes_recv'] - self.last_stats['bytes_recv']
+
                     total_connections = sum(app["connections"] for app in app_stats.values())
                     if total_connections > 0:
                         for app_name, stats in app_stats.items():
@@ -125,6 +127,10 @@ class NetworkMonitor:
                                 proportion = stats["connections"] / total_connections
                                 app_stats[app_name]["sent"] = sent_rate * proportion
                                 app_stats[app_name]["recv"] = recv_rate * proportion
+                    else:
+                        # No per-app connections (e.g. running without root): record system total
+                        app_stats["System"]["sent"] = sent_delta
+                        app_stats["System"]["recv"] = recv_delta
             
             self.last_stats = current_stats
             

@@ -14,6 +14,7 @@ airtraffic install  # macOS/Linux: use sudo | Windows: run as Administrator
 ### Monitor Network Usage
 
 ```bash
+airtraffic status                      # Show if app is running (and uptime)
 airtraffic live                        # macOS/Linux: use sudo | Windows: run as Administrator
 airtraffic since today                 # Show usage since today 12:00 AM
 airtraffic since month                 # Show usage since first of month 12:00 AM

@@ -73,6 +73,50 @@ def format_bytes(bytes_val: int) -> str:
     return f"{bytes_val:.2f} PB"
 
 
+def format_uptime(seconds: float) -> str:
+    """Format seconds as human-readable uptime (e.g. '2 hours 15 minutes')."""
+    if seconds < 60:
+        return f"{int(seconds)} second{'s' if int(seconds) != 1 else ''}"
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+    hours = minutes // 60
+    minutes = minutes % 60
+    if hours < 24:
+        parts = [f"{hours} hour{'s' if hours != 1 else ''}"]
+        if minutes:
+            parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+        return " ".join(parts)
+    days = hours // 24
+    hours = hours % 24
+    parts = [f"{days} day{'s' if days != 1 else ''}"]
+    if hours:
+        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+    if minutes:
+        parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+    return " ".join(parts)
+
+
+def show_status():
+    """Show whether the background daemon is running and for how long."""
+    import psutil
+    daemon = AirTrafficDaemon()
+    pid = daemon.get_pid()
+    if pid is None:
+        print("AirTraffic is not running.")
+        return
+    try:
+        proc = psutil.Process(pid)
+        start_ts = proc.create_time()
+        start_dt = datetime.fromtimestamp(start_ts)
+        uptime_seconds = time.time() - start_ts
+        uptime_str = format_uptime(uptime_seconds)
+        print(f"AirTraffic is running.")
+        print(f"Started at {start_dt.strftime('%Y-%m-%d %H:%M:%S')} ({uptime_str} ago).")
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        print("AirTraffic is not running.")
+
+
 def display_historical_stats(stats: dict, title: str, period: str):
     """Display historical network statistics.
     
@@ -89,7 +133,10 @@ def display_historical_stats(stats: dict, title: str, period: str):
     
     if not stats:
         print("No data available for this period.")
-        print("Run 'airtraffic install' to install and start the background service.")
+        if AirTrafficDaemon().get_pid() is not None:
+            print("The app is running; data will appear after it has been collecting for a while.")
+        else:
+            print("Run 'airtraffic install' to install and start the app.")
         return
     
     # Sort by total traffic
@@ -428,7 +475,7 @@ def install_launchd_service():
         with open(plist_path, 'w') as f:
             f.write(plist_content)
     
-    print("Installing launchd service...")
+    print("Installing AirTraffic...")
     
     # Use bootstrap instead of load (modern approach), suppress all output
     domain = f"gui/{os.getuid()}" if os.getenv('SUDO_USER') else f"gui/{os.getuid()}"
@@ -437,8 +484,7 @@ def install_launchd_service():
     # Give it a moment to start
     time.sleep(2)
     
-    print("Service installed and started!")
-    print("The daemon is now running and will start automatically on boot.")
+    print("AirTraffic installed.")
 
 
 def uninstall_launchd_service():
@@ -517,7 +563,7 @@ def install_windows_service():
     except subprocess.CalledProcessError as e:
         print(f"[FAILED] Failed to install service: {e}")
         print("  You may need to run this command as Administrator.")
-        print("  Run 'airtraffic install' as Administrator to install and start the service.")
+        print("  Run 'airtraffic install' as Administrator to install and start the app.")
 
 
 def uninstall_windows_service():
@@ -546,8 +592,9 @@ def main():
     if len(sys.argv) < 2:
         print("AirTraffic - CLI Network Tool")
         print("\nUsage:")
-        print("  airtraffic install            Install and start background service")
-        print("  airtraffic uninstall          Stop and uninstall background service")
+        print("  airtraffic install            Install and start app")
+        print("  airtraffic uninstall          Stop and uninstall app")
+        print("  airtraffic status             Show if app is running")
         print("  airtraffic since <timespec>   Show network usage since specified time")
         print("  airtraffic live               Show live network statistics")
         print("\nTime specifications for 'since':")
@@ -566,8 +613,9 @@ def main():
     if command in ['-h', '--help', 'help']:
         print("AirTraffic - CLI Network Tool")
         print("\nCommands:")
-        print("  install              Install as system service (auto-start on boot)")
-        print("  uninstall            Remove system service and stop monitoring")
+        print("  install              Install app (auto-start on boot)")
+        print("  uninstall            Remove app and stop monitoring")
+        print("  status               Show if app is running (and uptime)")
         print("  since <timespec>     Show network usage since specified time")
         print("  live                 Show real-time network statistics")
         print("\nTime specifications for 'since':")
@@ -577,16 +625,19 @@ def main():
         print("\nExamples:")
         print("  airtraffic since today")
         print("  airtraffic since month")
-        print("\nThe daemon runs automatically after installation.")
+        print("\nThe app runs automatically after installation.")
         print("Use 'since' to view historical usage from any point in time.")
         sys.exit(0)
     
     elif command == 'install':
         install_service()
-    
+
     elif command == 'uninstall':
         uninstall_service()
-    
+
+    elif command == 'status':
+        show_status()
+
     elif command == 'since':
         if len(sys.argv) < 3:
             print("Error: 'since' command requires a time specification.")

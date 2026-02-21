@@ -60,35 +60,35 @@ class AirTrafficDaemon:
     
     def is_running(self) -> bool:
         """Check if daemon is already running."""
+        return self.get_pid() is not None
+
+    def get_pid(self):
+        """Return daemon PID if running, else None."""
         import platform
         pid_file = self._get_pid_file()
-        
+
         if not os.path.exists(pid_file):
-            return False
-        
+            return None
+
         try:
             with open(pid_file, 'r') as f:
                 pid = int(f.read().strip())
-            
+
             # Check if process exists
             if platform.system() == 'Windows':
-                # On Windows, use tasklist to check if process exists
                 import subprocess
-                result = subprocess.run(['tasklist', '/FI', f'PID eq {pid}'], 
+                result = subprocess.run(['tasklist', '/FI', f'PID eq {pid}'],
                                       capture_output=True, text=True)
                 if str(pid) in result.stdout:
-                    return True
-                else:
-                    self._remove_pid()
-                    return False
+                    return pid
+                self._remove_pid()
+                return None
             else:
-                # On Unix, use os.kill with signal 0
                 os.kill(pid, 0)
-                return True
+                return pid
         except (OSError, ValueError):
-            # Process doesn't exist or PID file is invalid
             self._remove_pid()
-            return False
+            return None
     
     def start(self):
         """Start the daemon."""
@@ -172,17 +172,6 @@ class AirTrafficDaemon:
             print(f"Error stopping daemon: {e}")
             self._remove_pid()
     
-    def status(self):
-        """Check daemon status."""
-        if self.is_running():
-            pid_file = self._get_pid_file()
-            with open(pid_file, 'r') as f:
-                pid = int(f.read().strip())
-            print(f"AirTraffic daemon is running (PID: {pid})")
-            print(f"Database: {self.database.db_path}")
-            print(f"Database size: {self.database.get_database_size() / 1024:.2f} KB")
-        else:
-            print("AirTraffic daemon is not running.")
 
 
 def run_daemon():
