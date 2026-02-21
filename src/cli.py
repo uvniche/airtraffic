@@ -89,7 +89,7 @@ def display_historical_stats(stats: dict, title: str, period: str):
     
     if not stats:
         print("No data available for this period.")
-        print("Make sure the daemon is running: airtraffic start")
+        print("Run 'airtraffic install' to install and start the background service.")
         return
     
     # Sort by total traffic
@@ -281,7 +281,6 @@ def install_service():
         install_windows_service()
     else:
         print(f"Service installation not supported on {system}")
-        print("You can manually start the daemon with: airtraffic start")
 
 
 def uninstall_service():
@@ -518,7 +517,7 @@ def install_windows_service():
     except subprocess.CalledProcessError as e:
         print(f"[FAILED] Failed to install service: {e}")
         print("  You may need to run this command as Administrator.")
-        print("  Alternatively, you can manually start the daemon with: airtraffic start")
+        print("  Run 'airtraffic install' as Administrator to install and start the service.")
 
 
 def uninstall_windows_service():
