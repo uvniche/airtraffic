@@ -328,7 +328,11 @@ def _ensure_package_installed():
             print("Installing package in editable mode...")
             try:
                 subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "-e", d],
+                    [
+                        sys.executable, "-m", "pip", "install", "-e", d,
+                        "--no-cache-dir",
+                        "--root-user-action=ignore",
+                    ],
                     check=True,
                     capture_output=False,
                 )
@@ -497,8 +501,6 @@ def install_launchd_service():
     else:
         with open(plist_path, 'w') as f:
             f.write(plist_content)
-    
-    print("Installing AirTraffic...")
     
     # Use bootstrap instead of load (modern approach), suppress all output
     domain = f"gui/{os.getuid()}" if os.getenv('SUDO_USER') else f"gui/{os.getuid()}"
