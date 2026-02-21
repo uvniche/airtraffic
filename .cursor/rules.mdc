@@ -1,0 +1,76 @@
+---
+alwaysApply: true
+---
+
+## Commit and Push Workflow
+
+When the user says "commit & push", follow this specific workflow:
+
+1. **Add all files and commit to dev branch**
+   - Add all files (including untracked files) using `git add .`
+   - Stage and commit all current changes to the dev branch
+   - Use a descriptive commit message
+
+2. **Merge dev into main**
+   - Switch to main branch
+   - Merge dev branch into main
+
+3. **Push both branches**
+   - Push the dev branch
+   - Push the main branch
+
+4. **Switch back to dev branch**
+   - Switch back to the dev branch for continued development
+
+This ensures both branches stay in sync and all changes are properly versioned across both development and main branches.
+
+## Pull Latest Workflow
+
+When the user says "pull latest" or "sync with remote", follow this specific workflow:
+
+1. **Stash local changes**
+   - Stash any uncommitted work using `git stash`
+
+2. **Clean untracked files**
+   - Remove untracked files using `git clean -fd`
+
+3. **Sync main branch**
+   - Switch to main branch
+   - Pull latest changes from remote main
+
+4. **Sync dev branch**
+   - Switch to dev branch
+   - Pull latest changes from remote dev
+
+5. **Switch back to dev branch**
+   - Ensure you're on dev branch for continued development
+
+This ensures both branches are fully synced with the remote repository and you're ready to continue development.
+
+## CRITICAL: Never Commit & Push Without Permission
+
+**NEVER commit and push code changes without explicit user permission.**
+
+- Only execute git operations when the user specifically requests them
+- This rule overrides all other workflow rules
+- The user must explicitly say "commit & push" or similar command
+- **IMPORTANT: Permission is NOT persistent. You must get explicit permission each time.**
+
+## User Permission Rule
+
+**When the user says "commit & push", that is sufficient permission for that specific request.**
+
+- Execute the commit & push workflow immediately without asking for additional confirmation
+- Permission applies ONLY to that single operation
+- Do not reuse prior permission for future operations  
+- Each new "commit & push" request grants permission for that operation only
+- Never assume permission to commit & push automatically in future requests
+
+## Documentation Style
+
+Keep all documentation direct and concise.
+
+- No fluff, intros, or filler. State what’s needed only.
+- Prefer short sentences and bullet lists over long paragraphs.
+- README/docs: install steps, commands, and options—nothing extra.
+- In code: brief docstrings; comments only when behavior isn’t obvious.

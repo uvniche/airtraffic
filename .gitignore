@@ -38,9 +38,6 @@ env/
 *.swo
 *~
 
-# Cursor
-.cursor/
-
 # Testing / coverage
 .coverage
 .pytest_cache/
