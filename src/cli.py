@@ -40,27 +40,7 @@ def require_elevated_privileges(command: str):
         command: The command being executed (for error message)
     """
     if not check_elevated_privileges():
-        system = platform.system()
-        
-        print("=" * 70)
-        print("ERROR: Elevated Privileges Required")
-        print("=" * 70)
-        print()
-        
-        if system == "Windows":
-            print("This command requires Administrator privileges.")
-            print()
-            print("Please run this command as Administrator:")
-            print(f"  1. Right-click on Command Prompt or PowerShell")
-            print(f"  2. Select 'Run as administrator'")
-            print(f"  3. Run: airtraffic {command}")
-        else:  # Unix-like (macOS, Linux)
-            print("This command requires root privileges.")
-            print()
-            print("Please run this command with sudo:")
-            print(f"  sudo airtraffic {command}")
-        
-        print()
+        print("This command requires root privileges. (macOS/Linux: use sudo | Windows: run as Administrator)")
         sys.exit(1)
 
 
@@ -245,32 +225,7 @@ def live_monitor(interval: int = 2):
     Args:
         interval: Update interval in seconds (default: 2)
     """
-    # Check if running with sufficient privileges
-    if not check_elevated_privileges():
-        system = platform.system()
-        
-        print("=" * 70)
-        print("WARNING: Elevated Privileges Required")
-        print("=" * 70)
-        print()
-        print("The live monitor requires elevated privileges to see network")
-        print("connections and track per-application usage.")
-        print()
-        
-        if system == "Windows":
-            print("Please run this command as Administrator:")
-            print("  1. Right-click on Command Prompt or PowerShell")
-            print("  2. Select 'Run as administrator'")
-            print("  3. Run: airtraffic live")
-        else:  # Unix-like (macOS, Linux)
-            print("Please run this command with sudo:")
-            print("  sudo airtraffic live")
-        
-        print()
-        print("Continuing anyway (limited functionality)...")
-        print()
-        time.sleep(2)
-    
+    require_elevated_privileges('live')
     monitor = NetworkMonitor()
     
     print("AirTraffic - CLI Network Tool")
@@ -288,11 +243,6 @@ def live_monitor(interval: int = 2):
             print("AirTraffic - CLI Network Tool")
             print("=" * 72)
             print(f"Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # Show privilege warning in header if not elevated
-            if not check_elevated_privileges():
-                print("[WARNING] Limited mode - run with sudo for full stats")
-            
             print()
             
             # Get and display stats
@@ -344,6 +294,7 @@ def _ensure_package_installed():
 
 def install_service():
     """Install AirTraffic as a system service (assumes package already installed via pip install -e .)."""
+    require_elevated_privileges('run')
     system = platform.system()
 
     if system == "Darwin":  # macOS
@@ -360,9 +311,11 @@ def install_service():
 
 def uninstall_service():
     """Completely uninstall AirTraffic - service, data, and package."""
+    require_elevated_privileges('uninstall')
     import shutil
     import subprocess
 
+    print("AirTraffic uninstalling...")
     system = platform.system()
     daemon = AirTrafficDaemon()
     daemon.stop(quiet=True)
