@@ -5,8 +5,7 @@ CLI Network Tool
 ## Install
 
 ```bash
-pip install -e .
-airtraffic install  # macOS/Linux: use sudo | Windows: run as Administrator
+airtraffic install   # macOS/Linux: use sudo | Windows: run as Administrator
 ```
 
 ## Usage

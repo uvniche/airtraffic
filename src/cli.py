@@ -316,10 +316,33 @@ def live_monitor(interval: int = 2):
         sys.exit(1)
 
 
+def _ensure_package_installed():
+    """Run pip install -e . from the project root if we can find it (e.g. when developing)."""
+    import subprocess
+    # Start from this file and walk up to find a directory containing pyproject.toml
+    d = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(5):  # avoid infinite loop
+        if d == os.path.dirname(d):
+            break
+        if os.path.isfile(os.path.join(d, "pyproject.toml")):
+            print("Installing package in editable mode...")
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "-e", d],
+                    check=True,
+                    capture_output=False,
+                )
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: pip install -e . failed ({e}). Continuing with service install.")
+            return
+        d = os.path.dirname(d)
+
+
 def install_service():
     """Install AirTraffic as a system service."""
+    _ensure_package_installed()
     system = platform.system()
-    
+
     if system == "Darwin":  # macOS
         install_launchd_service()
     elif system == "Linux":
