@@ -17,14 +17,6 @@ Build:
 swift build
 ```
 
-Run (live view, refresh every 2 seconds):
-
-```bash
-swift run airtraffic
-
-# Or:
-.build/debug/airtraffic
-```
 Release build (faster binary):
 
 ```bash
@@ -32,18 +24,31 @@ swift build -c release
 .build/release/airtraffic
 ```
 
-Stop with **Ctrl+C**.
+### Commands
 
-## What it does
+**daemon** – start background collector and install login item (runs at login):
 
-- Runs `nettop` (built-in macOS tool) in per-process, CSV mode
-- Parses output and shows **top 20** apps by network usage
-- Refreshes every **2 seconds** with:
-  - **↓ Down** – bytes received in the last interval (and rate)
-  - **↑ Up** – bytes sent in the last interval (and rate)
-  - **Total/s** – combined rate
+```bash
+swift run airtraffic daemon
+```
 
-Only **Wi‑Fi** and **wired** interfaces are included (no loopback). No root/sudo needed.
+**status** – show since when the collector has been up (+ today’s top apps):
+
+```bash
+swift run airtraffic status
+```
+
+**live** – live per-app view, refresh every 2 seconds:
+
+```bash
+swift run airtraffic live
+```
+
+**today** – per-app usage since 12:00 AM today:
+
+```bash
+swift run airtraffic today
+```
 
 ## License
 
