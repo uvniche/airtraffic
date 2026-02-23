@@ -62,6 +62,12 @@ swift run airtraffic month
 swift run airtraffic since 01:01:2026 00:00
 ```
 
+**uninstall** – remove the login item and delete all stored data:
+
+```bash
+swift run airtraffic uninstall
+```
+
 ## License
 
 MIT
