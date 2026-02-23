@@ -35,6 +35,11 @@ struct Airtraffic {
             return
         }
 
+        if primary == "uninstall" {
+            UninstallCommand().run()
+            return
+        }
+
         // live (explicit) or no subcommand → live 2s view
         var lastSnapshot: [String: (bytesIn: UInt64, bytesOut: UInt64)] = [:]
         let nettop = NettopParser()
@@ -124,6 +129,8 @@ struct Airtraffic {
     /// Background collector: periodically samples nettop and persists per-app usage.
     static func runCollector(interval: TimeInterval) async {
         LoginItemInstaller.ensureInstalledIfNeeded()
+
+        print("Daemon started. It will continue running in the background.")
 
         let nettop = NettopParser()
         let resolver = AppNameResolver()
@@ -378,13 +385,17 @@ struct AppUsage: Codable {
 
 /// Installs a LaunchAgent so the collector runs automatically at login.
 enum LoginItemInstaller {
-    private static let label = "com.uvniche.airtraffic.collector"
+    static let label = "com.uvniche.airtraffic.collector"
+
+    static var plistURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents", isDirectory: true)
+            .appendingPathComponent("\(label).plist")
+    }
 
     static func ensureInstalledIfNeeded() {
         let fm = FileManager.default
-        let launchAgentsDir = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents", isDirectory: true)
-        let plistURL = launchAgentsDir.appendingPathComponent("\(label).plist")
+        let plistURL = Self.plistURL
 
         // If plist already exists, assume it's installed.
         if fm.fileExists(atPath: plistURL.path) {
@@ -392,7 +403,7 @@ enum LoginItemInstaller {
         }
 
         do {
-            try fm.createDirectory(at: launchAgentsDir, withIntermediateDirectories: true)
+            try fm.createDirectory(at: plistURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
             // Resolve the current executable path.
             let executableURL: URL = {
@@ -573,6 +584,40 @@ struct SinceCommand {
             let total = usage.bytesIn + usage.bytesOut
             print("- \(name): \(Airtraffic.formatBytes(total)) (↓ \(Airtraffic.formatBytes(usage.bytesIn)), ↑ \(Airtraffic.formatBytes(usage.bytesOut)))")
         }
+    }
+}
+
+/// `airtraffic uninstall` – remove login item and delete all data.
+struct UninstallCommand {
+    func run() {
+        let fm = FileManager.default
+        let plistURL = LoginItemInstaller.plistURL
+
+        // Unload LaunchAgent so the daemon stops and won’t run at login.
+        let uid = getuid()
+        let context = "gui/\(uid)"
+        let bootout = Process()
+        bootout.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        bootout.arguments = ["bootout", context, plistURL.path]
+        bootout.standardOutput = FileHandle.nullDevice
+        bootout.standardError = FileHandle.nullDevice
+        try? bootout.run()
+        bootout.waitUntilExit()
+
+        // Remove the plist so it doesn’t run at next login.
+        if fm.fileExists(atPath: plistURL.path) {
+            try? fm.removeItem(at: plistURL)
+        }
+
+        // Delete all stored data (state.json and the app support directory).
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support", isDirectory: true)
+        let dataDir = base.appendingPathComponent("airtraffic", isDirectory: true)
+        if fm.fileExists(atPath: dataDir.path) {
+            try? fm.removeItem(at: dataDir)
+        }
+
+        print("Uninstalled. Login item removed and all data deleted.")
     }
 }
 
