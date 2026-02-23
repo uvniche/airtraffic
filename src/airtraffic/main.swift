@@ -25,6 +25,16 @@ struct Airtraffic {
             return
         }
 
+        if primary == "month" {
+            MonthCommand().run()
+            return
+        }
+
+        if primary == "since" {
+            SinceCommand(args: Array(args.dropFirst())).run()
+            return
+        }
+
         // live (explicit) or no subcommand → live 2s view
         var lastSnapshot: [String: (bytesIn: UInt64, bytesOut: UInt64)] = [:]
         let nettop = NettopParser()
@@ -119,6 +129,15 @@ struct Airtraffic {
         let resolver = AppNameResolver()
         var state = AirtrafficState.load() ?? AirtrafficState.empty(now: Date())
 
+        // Ensure month start exists for older state files.
+        if state.monthStart == nil {
+            let now = Date()
+            let calendar = Calendar.current
+            let midnight = calendar.startOfDay(for: now)
+            state.monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? midnight
+            state.monthByApp = [:]
+        }
+
         while true {
             autoreleasepool {
                 do {
@@ -130,6 +149,15 @@ struct Airtraffic {
                     // Reset "today" counters if day changed.
                     if !Calendar.current.isDate(now, inSameDayAs: state.todayStart) {
                         state.resetToday(now: now)
+                    }
+
+                    // Reset monthly counters if month changed.
+                    if let monthStart = state.monthStart,
+                       !Calendar.current.isDate(now, equalTo: monthStart, toGranularity: .month) {
+                        let calendar = Calendar.current
+                        let midnight = calendar.startOfDay(for: now)
+                        state.monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? midnight
+                        state.monthByApp = [:]
                     }
 
                     // Compute deltas vs last snapshot and accumulate into today's totals.
@@ -144,6 +172,20 @@ struct Airtraffic {
                         todayUsage.bytesOut &+= dOut
                         state.todayByApp[key] = todayUsage
                         state.lastSnapshot[key] = AppUsage(bytesIn: row.bytesIn, bytesOut: row.bytesOut)
+
+                        // Accumulate into monthly totals.
+                        var monthUsage = state.monthByApp[key] ?? AppUsage(bytesIn: 0, bytesOut: 0)
+                        monthUsage.bytesIn &+= dIn
+                        monthUsage.bytesOut &+= dOut
+                        state.monthByApp[key] = monthUsage
+
+                        // Accumulate into custom-since totals if configured.
+                        if let sinceStart = state.sinceStart, now >= sinceStart {
+                            var sinceUsage = state.sinceByApp[key] ?? AppUsage(bytesIn: 0, bytesOut: 0)
+                            sinceUsage.bytesIn &+= dIn
+                            sinceUsage.bytesOut &+= dOut
+                            state.sinceByApp[key] = sinceUsage
+                        }
                     }
 
                     state.lastUpdate = now
@@ -271,23 +313,32 @@ struct Airtraffic {
     }
 }
 
-/// Persistent usage state for background collector.
+/// Persistent usage state for the daemon.
 struct AirtrafficState: Codable {
     var collectorStart: Date
     var lastUpdate: Date
     var todayStart: Date
     var todayByApp: [String: AppUsage]
     var lastSnapshot: [String: AppUsage]
+    var monthStart: Date?
+    var monthByApp: [String: AppUsage] = [:]
+    var sinceStart: Date?
+    var sinceByApp: [String: AppUsage] = [:]
 
     static func empty(now: Date) -> AirtrafficState {
         let calendar = Calendar.current
         let midnight = calendar.startOfDay(for: now)
+        let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? midnight
         return AirtrafficState(
             collectorStart: now,
             lastUpdate: now,
             todayStart: midnight,
             todayByApp: [:],
-            lastSnapshot: [:]
+            lastSnapshot: [:],
+            monthStart: monthStart,
+            monthByApp: [:],
+            sinceStart: nil,
+            sinceByApp: [:]
         )
     }
 
@@ -392,31 +443,18 @@ enum LoginItemInstaller {
 struct StatusCommand {
     func run() {
         guard let state = AirtrafficState.load() else {
-            print("Collector: not running (no state found).")
+            print("Daemon: not running (no state found).")
             return
         }
         let now = Date()
         let active = now.timeIntervalSince(state.lastUpdate) < 10
 
-        print("Collector: \(active ? "running" : "not running")")
+        print("Daemon: \(active ? "running" : "not running")")
 
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .medium
         print("Running since: \(formatter.string(from: state.collectorStart))")
-
-        let apps = state.todayByApp.sorted { lhs, rhs in
-            let l = lhs.value.bytesIn + lhs.value.bytesOut
-            let r = rhs.value.bytesIn + rhs.value.bytesOut
-            return l > r
-        }
-        if !apps.isEmpty {
-            print("\nToday so far (top 10 apps by bytes):")
-            for (name, usage) in apps.prefix(10) {
-                let total = usage.bytesIn + usage.bytesOut
-                print("- \(name): \(Airtraffic.formatBytes(total)) (↓ \(Airtraffic.formatBytes(usage.bytesIn)), ↑ \(Airtraffic.formatBytes(usage.bytesOut)))")
-            }
-        }
     }
 }
 
@@ -444,6 +482,93 @@ struct TodayCommand {
         }
 
         print("Per-app usage since midnight:")
+        for (name, usage) in apps {
+            let total = usage.bytesIn + usage.bytesOut
+            print("- \(name): \(Airtraffic.formatBytes(total)) (↓ \(Airtraffic.formatBytes(usage.bytesIn)), ↑ \(Airtraffic.formatBytes(usage.bytesOut)))")
+        }
+    }
+}
+
+/// `airtraffic month`
+struct MonthCommand {
+    func run() {
+        guard let state = AirtrafficState.load(),
+              let monthStart = state.monthStart else {
+            print("No monthly data recorded yet.")
+            return
+        }
+
+        let apps = state.monthByApp.sorted { lhs, rhs in
+            let l = lhs.value.bytesIn + lhs.value.bytesOut
+            let r = rhs.value.bytesIn + rhs.value.bytesOut
+            return l > r
+        }
+        if apps.isEmpty {
+            print("No data recorded for this month yet.")
+            return
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        print("Per-app usage since start of month (\(formatter.string(from: monthStart))):")
+        for (name, usage) in apps {
+            let total = usage.bytesIn + usage.bytesOut
+            print("- \(name): \(Airtraffic.formatBytes(total)) (↓ \(Airtraffic.formatBytes(usage.bytesIn)), ↑ \(Airtraffic.formatBytes(usage.bytesOut)))")
+        }
+    }
+}
+
+/// `airtraffic since dd:MM:yyyy HH:mm`
+struct SinceCommand {
+    let args: [String]
+
+    func run() {
+        guard !args.isEmpty else {
+            print("Usage: airtraffic since dd:MM:yyyy HH:mm")
+            return
+        }
+
+        let dateString = args.joined(separator: " ")
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "dd:MM:yyyy HH:mm"
+
+        guard let sinceDate = formatter.date(from: dateString) else {
+            print("Could not parse date/time '\(dateString)'. Expected format: dd:MM:yyyy HH:mm")
+            return
+        }
+
+        var state = AirtrafficState.load() ?? AirtrafficState.empty(now: Date())
+        state.sinceStart = sinceDate
+        state.sinceByApp = [:]
+        state.persist()
+
+        // If we don't yet have any accumulated data for this since-period, inform the user.
+        let now = Date()
+        if now <= sinceDate {
+            print("Since-period starts in the future (\(formatter.string(from: sinceDate))). No data yet.")
+            return
+        }
+
+        // If collector hasn't yet accumulated since-data, tell the user it will start from now.
+        if state.sinceByApp.isEmpty {
+            print("Initialized custom 'since' window at \(formatter.string(from: sinceDate)).")
+            print("The daemon will accumulate usage from now onward for this window.")
+            return
+        }
+
+        let apps = state.sinceByApp.sorted { lhs, rhs in
+            let l = lhs.value.bytesIn + lhs.value.bytesOut
+            let r = rhs.value.bytesIn + rhs.value.bytesOut
+            return l > r
+        }
+        if apps.isEmpty {
+            print("No data recorded for the requested period yet.")
+            return
+        }
+
+        print("Per-app usage since \(formatter.string(from: sinceDate)):")
         for (name, usage) in apps {
             let total = usage.bytesIn + usage.bytesOut
             print("- \(name): \(Airtraffic.formatBytes(total)) (↓ \(Airtraffic.formatBytes(usage.bytesIn)), ↑ \(Airtraffic.formatBytes(usage.bytesOut)))")
