@@ -6,7 +6,26 @@ import AppKit
 struct Airtraffic {
     static func main() async {
         let interval: TimeInterval = 2.0
-        let once = CommandLine.arguments.contains("--once")
+        let args = Array(CommandLine.arguments.dropFirst())
+        let primary = args.first
+        let once = args.contains("--once") || primary == "once"
+
+        if primary == "daemon" {
+            await runCollector(interval: interval)
+            return
+        }
+
+        if primary == "status" {
+            StatusCommand().run()
+            return
+        }
+
+        if primary == "today" {
+            TodayCommand().run()
+            return
+        }
+
+        // live (explicit) or no subcommand → live 2s view
         var lastSnapshot: [String: (bytesIn: UInt64, bytesOut: UInt64)] = [:]
         let nettop = NettopParser()
         let appResolver = AppNameResolver()
@@ -87,6 +106,52 @@ struct Airtraffic {
                 }
             } catch {
                 fputs("Error: \(error)\n", stderr)
+            }
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+    }
+
+    /// Background collector: periodically samples nettop and persists per-app usage.
+    static func runCollector(interval: TimeInterval) async {
+        LoginItemInstaller.ensureInstalledIfNeeded()
+
+        let nettop = NettopParser()
+        let resolver = AppNameResolver()
+        var state = AirtrafficState.load() ?? AirtrafficState.empty(now: Date())
+
+        while true {
+            autoreleasepool {
+                do {
+                    let rows = try nettop.sample()
+                    guard !rows.isEmpty else { return }
+                    let byApp = aggregateByApp(rows, resolver: resolver)
+                    let now = Date()
+
+                    // Reset "today" counters if day changed.
+                    if !Calendar.current.isDate(now, inSameDayAs: state.todayStart) {
+                        state.resetToday(now: now)
+                    }
+
+                    // Compute deltas vs last snapshot and accumulate into today's totals.
+                    for row in byApp {
+                        let key = row.name
+                        let previous = state.lastSnapshot[key] ?? AppUsage(bytesIn: 0, bytesOut: 0)
+                        let dIn = row.bytesIn >= previous.bytesIn ? row.bytesIn - previous.bytesIn : 0
+                        let dOut = row.bytesOut >= previous.bytesOut ? row.bytesOut - previous.bytesOut : 0
+                        if dIn == 0 && dOut == 0 { continue }
+                        var todayUsage = state.todayByApp[key] ?? AppUsage(bytesIn: 0, bytesOut: 0)
+                        todayUsage.bytesIn &+= dIn
+                        todayUsage.bytesOut &+= dOut
+                        state.todayByApp[key] = todayUsage
+                        state.lastSnapshot[key] = AppUsage(bytesIn: row.bytesIn, bytesOut: row.bytesOut)
+                    }
+
+                    state.lastUpdate = now
+                    state.persist()
+                } catch {
+                    // If nettop fails, quietly exit collector.
+                    return
+                }
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
@@ -202,6 +267,186 @@ struct Airtraffic {
             return String(format: "%.2f KiB/s", bytesPerSec / 1024)
         } else {
             return String(format: "%.0f B/s", bytesPerSec)
+        }
+    }
+}
+
+/// Persistent usage state for background collector.
+struct AirtrafficState: Codable {
+    var collectorStart: Date
+    var lastUpdate: Date
+    var todayStart: Date
+    var todayByApp: [String: AppUsage]
+    var lastSnapshot: [String: AppUsage]
+
+    static func empty(now: Date) -> AirtrafficState {
+        let calendar = Calendar.current
+        let midnight = calendar.startOfDay(for: now)
+        return AirtrafficState(
+            collectorStart: now,
+            lastUpdate: now,
+            todayStart: midnight,
+            todayByApp: [:],
+            lastSnapshot: [:]
+        )
+    }
+
+    mutating func resetToday(now: Date) {
+        let calendar = Calendar.current
+        todayStart = calendar.startOfDay(for: now)
+        todayByApp = [:]
+    }
+
+    static func stateURL() -> URL {
+        let fm = FileManager.default
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support", isDirectory: true)
+        let dir = base.appendingPathComponent("airtraffic", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("state.json")
+    }
+
+    static func load() -> AirtrafficState? {
+        let url = stateURL()
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(AirtrafficState.self, from: data)
+    }
+
+    func persist() {
+        let url = Self.stateURL()
+        if let data = try? JSONEncoder().encode(self) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+}
+
+struct AppUsage: Codable {
+    var bytesIn: UInt64
+    var bytesOut: UInt64
+}
+
+/// Installs a LaunchAgent so the collector runs automatically at login.
+enum LoginItemInstaller {
+    private static let label = "com.uvniche.airtraffic.collector"
+
+    static func ensureInstalledIfNeeded() {
+        let fm = FileManager.default
+        let launchAgentsDir = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents", isDirectory: true)
+        let plistURL = launchAgentsDir.appendingPathComponent("\(label).plist")
+
+        // If plist already exists, assume it's installed.
+        if fm.fileExists(atPath: plistURL.path) {
+            return
+        }
+
+        do {
+            try fm.createDirectory(at: launchAgentsDir, withIntermediateDirectories: true)
+
+            // Resolve the current executable path.
+            let executableURL: URL = {
+                if let url = Bundle.main.executableURL {
+                    return url
+                }
+                let arg0 = CommandLine.arguments.first ?? "airtraffic"
+                if arg0.hasPrefix("/") {
+                    return URL(fileURLWithPath: arg0)
+                } else {
+                    let cwd = fm.currentDirectoryPath
+                    return URL(fileURLWithPath: arg0, relativeTo: URL(fileURLWithPath: cwd)).standardizedFileURL
+                }
+            }()
+
+            let plist: [String: Any] = [
+                "Label": label,
+                "ProgramArguments": [executableURL.path, "daemon"],
+                "RunAtLoad": true,
+                "KeepAlive": true,
+            ]
+
+            let data = try PropertyListSerialization.data(
+                fromPropertyList: plist,
+                format: .xml,
+                options: 0
+            )
+            try data.write(to: plistURL, options: .atomic)
+
+            // Ask launchd to load it so it will run at login (and now, if not already).
+            let uid = getuid()
+            let context = "gui/\(uid)"
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+            proc.arguments = ["bootstrap", context, plistURL.path]
+            proc.standardOutput = FileHandle.nullDevice
+            proc.standardError = FileHandle.nullDevice
+            try? proc.run()
+            proc.waitUntilExit()
+        } catch {
+            // Best-effort; failure just means the user can install manually.
+            return
+        }
+    }
+}
+
+/// `airtraffic status`
+struct StatusCommand {
+    func run() {
+        guard let state = AirtrafficState.load() else {
+            print("Collector: not running (no state found).")
+            return
+        }
+        let now = Date()
+        let active = now.timeIntervalSince(state.lastUpdate) < 10
+
+        print("Collector: \(active ? "running" : "not running")")
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        print("Running since: \(formatter.string(from: state.collectorStart))")
+
+        let apps = state.todayByApp.sorted { lhs, rhs in
+            let l = lhs.value.bytesIn + lhs.value.bytesOut
+            let r = rhs.value.bytesIn + rhs.value.bytesOut
+            return l > r
+        }
+        if !apps.isEmpty {
+            print("\nToday so far (top 10 apps by bytes):")
+            for (name, usage) in apps.prefix(10) {
+                let total = usage.bytesIn + usage.bytesOut
+                print("- \(name): \(Airtraffic.formatBytes(total)) (↓ \(Airtraffic.formatBytes(usage.bytesIn)), ↑ \(Airtraffic.formatBytes(usage.bytesOut)))")
+            }
+        }
+    }
+}
+
+/// `airtraffic today`
+struct TodayCommand {
+    func run() {
+        guard let state = AirtrafficState.load() else {
+            print("No usage data recorded yet.")
+            return
+        }
+        let now = Date()
+        if !Calendar.current.isDate(now, inSameDayAs: state.todayStart) {
+            print("No data for today yet.")
+            return
+        }
+
+        let apps = state.todayByApp.sorted { lhs, rhs in
+            let l = lhs.value.bytesIn + lhs.value.bytesOut
+            let r = rhs.value.bytesIn + rhs.value.bytesOut
+            return l > r
+        }
+        if apps.isEmpty {
+            print("No data recorded for today yet.")
+            return
+        }
+
+        print("Per-app usage since midnight:")
+        for (name, usage) in apps {
+            let total = usage.bytesIn + usage.bytesOut
+            print("- \(name): \(Airtraffic.formatBytes(total)) (↓ \(Airtraffic.formatBytes(usage.bytesIn)), ↑ \(Airtraffic.formatBytes(usage.bytesOut)))")
         }
     }
 }
