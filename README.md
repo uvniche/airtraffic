@@ -26,13 +26,13 @@ swift build -c release
 
 ### Commands
 
-**daemon** – start background collector and install login item (runs at login):
+**daemon** – start the daemon and install a login item so it runs at login:
 
 ```bash
 swift run airtraffic daemon
 ```
 
-**status** – show since when the collector has been up (+ today’s top apps):
+**status** – show how long the daemon has been running:
 
 ```bash
 swift run airtraffic status
@@ -48,6 +48,18 @@ swift run airtraffic live
 
 ```bash
 swift run airtraffic today
+```
+
+**month** – per-app usage since 12:00 AM on the first day of the current month:
+
+```bash
+swift run airtraffic month
+```
+
+**since** – per-app usage since a specific date & time (format: `dd:MM:yyyy HH:mm`):
+
+```bash
+swift run airtraffic since 01:01:2026 00:00
 ```
 
 ## License
