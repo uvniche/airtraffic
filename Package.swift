@@ -12,7 +12,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "airtraffic",
-            path: "Sources/airtraffic"
+            path: "src/airtraffic"
         ),
     ]
 )
