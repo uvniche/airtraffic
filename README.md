@@ -1,6 +1,6 @@
 # AirTraffic
 
-macOS CLI Network Tool
+macOS CLI Network App
 
 ## Requirements
 
