@@ -17,13 +17,6 @@ Build:
 swift build
 ```
 
-Release build (faster binary):
-
-```bash
-swift build -c release
-.build/release/airtraffic
-```
-
 ### Commands
 
 **daemon** – start the daemon and install a login item so it runs at login:
