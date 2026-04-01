@@ -151,6 +151,8 @@ struct Airtraffic {
         let nettop = NettopParser()
         let resolver = AppNameResolver()
         var state = AirtrafficState.load() ?? AirtrafficState.empty(now: Date())
+        // Always stamp the real start time of this daemon process.
+        state.collectorStart = Date()
 
         // Ensure month start exists for older state files.
         if state.monthStart == nil {
