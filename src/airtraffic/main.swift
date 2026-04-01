@@ -11,9 +11,10 @@ struct Airtraffic {
         let once = args.contains("--once") || primary == "once"
 
         if primary == "daemon" {
-            // If we're not already the detached child, re-launch ourselves in the
-            // background and return immediately so the terminal is free.
+            // If we're not already the detached child, kill any existing daemons,
+            // then re-launch ourselves in the background and return immediately.
             if args.last != "--daemonized" {
+                killExistingDaemons()
                 let exe = CommandLine.arguments[0]
                 let child = Process()
                 child.executableURL = URL(fileURLWithPath: exe)
@@ -327,6 +328,27 @@ struct Airtraffic {
         } else {
             return String(format: "%.0f B/s", bytesPerSec)
         }
+    }
+
+    /// Kill all running airtraffic daemon processes except ourselves.
+    static func killExistingDaemons() {
+        let myPID = getpid()
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
+        proc.arguments = ["-c", "pgrep -x airtraffic"]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = FileHandle.nullDevice
+        try? proc.run()
+        proc.waitUntilExit()
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        for line in output.split(separator: "\n") {
+            if let pid = pid_t(line.trimmingCharacters(in: .whitespaces)), pid != myPID {
+                kill(pid, SIGTERM)
+            }
+        }
+        // Brief pause so terminated processes have time to exit before we proceed.
+        usleep(300_000)
     }
 }
 
