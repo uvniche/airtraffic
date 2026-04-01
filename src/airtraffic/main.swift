@@ -307,14 +307,15 @@ struct Airtraffic {
 
     static func writeFrame(_ tty: FileHandle, _ lines: [String], moveUp: Int?) {
         var out = ""
-        // Move cursor up to the start of the previous frame.
+        // Move cursor up to the start of the previous frame, then erase
+        // everything from the cursor to end of screen so no stale lines
+        // from a longer previous frame can bleed through.
         if let moveUp, moveUp > 0 {
             out += "\u{1B}[\(moveUp)A"
         }
+        out += "\u{1B}[J"   // erase from cursor to end of screen
         for (i, line) in lines.enumerated() {
-            // Clear entire line, go to column 0, write content.
             out += "\u{1B}[2K\r\(line)"
-            // Move down to next line (except after the last line).
             if i < lines.count - 1 {
                 out += "\n"
             }
