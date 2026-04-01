@@ -11,9 +11,10 @@ struct Airtraffic {
         let once = args.contains("--once") || primary == "once"
 
         if primary == "daemon" {
-            // If we're not already the detached child, kill any existing daemons,
-            // then re-launch ourselves in the background and return immediately.
+            // If we're not already the detached child, stop launchd + kill all
+            // existing daemons, then re-launch ourselves and re-register launchd.
             if args.last != "--daemonized" {
+                launchctlBootout()
                 killExistingDaemons()
                 let exe = CommandLine.arguments[0]
                 let child = Process()
@@ -136,8 +137,9 @@ struct Airtraffic {
     /// Background collector: periodically samples nettop and persists per-app usage.
     static func runCollector(interval: TimeInterval) async {
         LoginItemInstaller.ensureInstalledIfNeeded()
-
-        print("Daemon started. It will continue running in the background.")
+        // Re-register with launchd now that we're the one true daemon process,
+        // so KeepAlive works if we crash (but won't spawn duplicates on normal restart).
+        launchctlBootstrap()
 
         let nettop = NettopParser()
         let resolver = AppNameResolver()
@@ -344,17 +346,41 @@ struct Airtraffic {
         }
     }
 
-    /// Kill only airtraffic processes running as daemons (have "daemon" in their args), except ourselves.
+    /// Unload the LaunchAgent so launchd stops respawning the daemon.
+    static func launchctlBootout() {
+        let plistURL = LoginItemInstaller.plistURL
+        guard FileManager.default.fileExists(atPath: plistURL.path) else { return }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        proc.arguments = ["bootout", "gui/\(getuid())", plistURL.path]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError  = FileHandle.nullDevice
+        try? proc.run()
+        proc.waitUntilExit()
+    }
+
+    /// Re-register the LaunchAgent after the new daemon has been forked.
+    static func launchctlBootstrap() {
+        let plistURL = LoginItemInstaller.plistURL
+        guard FileManager.default.fileExists(atPath: plistURL.path) else { return }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        proc.arguments = ["bootstrap", "gui/\(getuid())", plistURL.path]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError  = FileHandle.nullDevice
+        try? proc.run()
+        proc.waitUntilExit()
+    }
+
+    /// Kill all airtraffic daemon processes (those with "daemon" in args) except ourselves.
     static func killExistingDaemons() {
         let myPID = getpid()
-        // pgrep -x airtraffic lists PIDs; we then check /proc-style args via ps to confirm it's a daemon.
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/sh")
-        // Use ps to find airtraffic processes whose argument list contains "daemon".
-        proc.arguments = ["-c", "ps -ax -o pid=,args= | grep ' airtraffic daemon' | grep -v grep"]
+        proc.arguments = ["-c", "ps -ax -o pid=,args= | grep 'airtraffic daemon' | grep -v grep"]
         let pipe = Pipe()
         proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
+        proc.standardError  = FileHandle.nullDevice
         try? proc.run()
         proc.waitUntilExit()
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
@@ -364,8 +390,7 @@ struct Airtraffic {
                 kill(pid, SIGTERM)
             }
         }
-        // Brief pause so terminated processes have time to exit before we proceed.
-        usleep(300_000)
+        usleep(500_000)
     }
 }
 
@@ -672,17 +697,9 @@ struct UninstallCommand {
         let fm = FileManager.default
         let plistURL = LoginItemInstaller.plistURL
 
-        // Unload LaunchAgent so the daemon stops and won’t run at login.
-        let uid = getuid()
-        let context = "gui/\(uid)"
-        let bootout = Process()
-        bootout.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        bootout.arguments = ["bootout", context, plistURL.path]
-        bootout.standardOutput = FileHandle.nullDevice
-        bootout.standardError = FileHandle.nullDevice
-        try? bootout.run()
-        bootout.waitUntilExit()
-
+        // Unload LaunchAgent so launchd stops respawning, then kill all daemons.
+        Airtraffic.launchctlBootout()
+        Airtraffic.killExistingDaemons()
         // Remove the plist so it doesn’t run at next login.
         if fm.fileExists(atPath: plistURL.path) {
             try? fm.removeItem(at: plistURL)
