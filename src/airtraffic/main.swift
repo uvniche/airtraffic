@@ -85,23 +85,6 @@ struct Airtraffic {
             return
         }
 
-        // Header occupies rows 1-5:
-        //   1: title, 2: subtitle, 3: blank, 4: col header, 5: separator
-        // Data rows start at row 6, count varies each tick.
-        // If row count changes, full clear + reprint; otherwise overwrite in place.
-        let dataStartRow = 6
-        var lastRowCount = -1
-
-        func printHeader() {
-            let headerBlock = "AirTraffic – live per-app network usage (Ctrl+C to quit)\n"
-                            + "Refreshing every \(Int(interval))s…\n"
-                            + "\n"
-                            + headerLines().joined(separator: "\n") + "\n"
-            ttyWrite(tty, "\u{1B}[2J\u{1B}[H" + headerBlock)
-        }
-
-        printHeader()
-
         while true {
             do {
                 let rows = try nettop.sample()
@@ -125,21 +108,15 @@ struct Airtraffic {
                 let nonZero = deltas.filter { $0.bytesIn > 0 || $0.bytesOut > 0 }
                 let display = nonZero.isEmpty ? Array(deltas.prefix(topN)) : Array(nonZero.prefix(topN))
 
-                if display.count != lastRowCount {
-                    // Row count changed — full clear so no stale rows remain
-                    printHeader()
-                    lastRowCount = display.count
+                var out = "\u{1B}[2J\u{1B}[H"  // clear screen, cursor to top
+                out += "AirTraffic – live per-app network usage\n"
+                out += "\n"
+                out += headerLines().joined(separator: "\n") + "\n"
+                for row in display {
+                    out += rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval) + "\n"
                 }
-
-                var out = ""
-                for (i, row) in display.enumerated() {
-                    out += "\u{1B}[\(dataStartRow + i);1H\u{1B}[2K"
-                    out += rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval)
-                }
-                let blankRow = dataStartRow + display.count
-                let footerRow = blankRow + 2
-                out += "\u{1B}[\(blankRow);1H\u{1B}[2K"
-                out += "\u{1B}[\(footerRow);1H\u{1B}[2KCtrl+C to quit"
+                out += "\n"
+                out += "Ctrl+C to quit"
                 ttyWrite(tty, out)
             } catch {
                 fputs("Error: \(error)\n", stderr)
@@ -563,47 +540,28 @@ extension Airtraffic {
     }
 
     /// Shared live-refresh loop for cumulative views (today / month / since).
-    /// Prints title + column headers once; only overwrites data rows each tick.
     static func runLiveCumulative(
         dataProvider: () -> (title: String, apps: [(name: String, bytesIn: UInt64, bytesOut: UInt64)])?
     ) async {
         let interval: TimeInterval = 2.0
         let topN = 30
         let tty = openTTY()
-        var lastTitle = ""
-        let headerLines = cumulativeHeaderLines()
-        let dataStartRow = 1 + headerLines.count + 1  // title + header lines + 1-based offset
-        var lastRowCount = -1
-
-        func printHeader(_ title: String) {
-            var h = "\u{1B}[2J\u{1B}[H" + title + "\n"
-            for line in headerLines { h += line + "\n" }
-            ttyWrite(tty, h)
-        }
 
         while true {
             if let (title, apps) = dataProvider() {
                 let display = Array(apps.prefix(topN))
-
-                if title != lastTitle || display.count != lastRowCount {
-                    printHeader(title)
-                    lastTitle = title
-                    lastRowCount = display.count
+                var out = "\u{1B}[2J\u{1B}[H"  // clear screen, cursor to top
+                out += title + "\n"
+                out += "\n"
+                for line in cumulativeHeaderLines() { out += line + "\n" }
+                for row in display {
+                    out += cumulativeRowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut) + "\n"
                 }
-
-                var out = ""
-                for (i, row) in display.enumerated() {
-                    out += "\u{1B}[\(dataStartRow + i);1H\u{1B}[2K"
-                    out += cumulativeRowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut)
-                }
-                let blankRow = dataStartRow + display.count
-                let footerRow = blankRow + 2
-                out += "\u{1B}[\(blankRow);1H\u{1B}[2K"
-                out += "\u{1B}[\(footerRow);1H\u{1B}[2KCtrl+C to quit"
+                out += "\n"
+                out += "Ctrl+C to quit"
                 ttyWrite(tty, out)
             } else {
-                ttyWrite(tty, "\u{1B}[2J\u{1B}[HWaiting for data… (Ctrl+C to quit)")
-                lastRowCount = -1
+                ttyWrite(tty, "\u{1B}[2J\u{1B}[HWaiting for data…\n\nCtrl+C to quit")
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
