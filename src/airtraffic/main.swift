@@ -223,10 +223,21 @@ struct Airtraffic {
         var sum: [String: (bytesIn: UInt64, bytesOut: UInt64)] = [:]
         for row in rows {
             let appName = resolver.appName(forPID: row.pid, fallbackProcessName: row.name)
+            if shouldIgnoreAppFromUsageTables(appName) { continue }
             let existing = sum[appName] ?? (0, 0)
             sum[appName] = (existing.0 + row.bytesIn, existing.1 + row.bytesOut)
         }
         return sum.map { (name: $0.key, bytesIn: $0.value.0, bytesOut: $0.value.1) }
+    }
+
+    /// Filter noisy system discovery traffic that is not useful in user-facing usage tables.
+    static func shouldIgnoreAppFromUsageTables(_ appName: String) -> Bool {
+        let normalized = appName
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+        return normalized.contains("mdnsresponder") || normalized.contains("mdnshelper")
     }
 
     static func headerLines() -> [String] {
