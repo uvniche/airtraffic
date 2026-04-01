@@ -83,12 +83,17 @@ struct Airtraffic {
 
         // Enter alternate screen buffer — like top/htop, keeps main scrollback clean
         ttyWrite(tty, "\u{1B}[?1049h")
+        // Raw mode: suppress echo so scroll/key events don't print garbage on screen
+        let savedTermios = enableRawMode(tty: tty)
         // Restore on Ctrl+C
         let sigHandler: @convention(c) (Int32) -> Void = { _ in
             let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
+            var s = rawModeSaved
+            tcsetattr(restoreTTY.fileDescriptor, TCSAFLUSH, &s)
             if let d = "\u{1B}[?1049l".data(using: .utf8) { restoreTTY.write(d) }
             exit(0)
         }
+        rawModeSaved = savedTermios
         signal(SIGINT, sigHandler)
 
         while true {
@@ -554,11 +559,15 @@ extension Airtraffic {
         let tty = openTTY()
 
         ttyWrite(tty, "\u{1B}[?1049h")
+        let savedTermios = enableRawMode(tty: tty)
         let sigHandler: @convention(c) (Int32) -> Void = { _ in
             let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
+            var s = rawModeSaved
+            tcsetattr(restoreTTY.fileDescriptor, TCSAFLUSH, &s)
             if let d = "\u{1B}[?1049l".data(using: .utf8) { restoreTTY.write(d) }
             exit(0)
         }
+        rawModeSaved = savedTermios
         signal(SIGINT, sigHandler)
 
         while true {
@@ -691,6 +700,23 @@ struct UninstallCommand {
         }
 
         print("Uninstalled. Login item removed and all data deleted.")
+    }
+}
+
+/// Global storage for the saved terminal state so the C signal handler can access it.
+var rawModeSaved = termios()
+
+extension Airtraffic {
+    /// Put the tty into raw mode (no echo, no canonical input) so scroll/key events
+    /// from the trackpad don't get echoed as garbage characters on screen.
+    @discardableResult
+    static func enableRawMode(tty: FileHandle) -> termios {
+        var saved = termios()
+        tcgetattr(tty.fileDescriptor, &saved)
+        var raw = saved
+        raw.c_lflag &= ~tcflag_t(ECHO | ICANON)
+        tcsetattr(tty.fileDescriptor, TCSAFLUSH, &raw)
+        return saved
     }
 }
 
