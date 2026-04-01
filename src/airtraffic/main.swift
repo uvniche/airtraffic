@@ -332,12 +332,14 @@ struct Airtraffic {
         }
     }
 
-    /// Kill all running airtraffic daemon processes except ourselves.
+    /// Kill only airtraffic processes running as daemons (have "daemon" in their args), except ourselves.
     static func killExistingDaemons() {
         let myPID = getpid()
+        // pgrep -x airtraffic lists PIDs; we then check /proc-style args via ps to confirm it's a daemon.
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/sh")
-        proc.arguments = ["-c", "pgrep -x airtraffic"]
+        // Use ps to find airtraffic processes whose argument list contains "daemon".
+        proc.arguments = ["-c", "ps -ax -o pid=,args= | grep ' airtraffic daemon' | grep -v grep"]
         let pipe = Pipe()
         proc.standardOutput = pipe
         proc.standardError = FileHandle.nullDevice
@@ -345,7 +347,8 @@ struct Airtraffic {
         proc.waitUntilExit()
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         for line in output.split(separator: "\n") {
-            if let pid = pid_t(line.trimmingCharacters(in: .whitespaces)), pid != myPID {
+            let parts = line.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
+            if let pidStr = parts.first, let pid = pid_t(pidStr), pid != myPID {
                 kill(pid, SIGTERM)
             }
         }
