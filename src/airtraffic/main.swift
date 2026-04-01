@@ -22,7 +22,7 @@ struct Airtraffic {
                 child.standardOutput = FileHandle.nullDevice
                 child.standardError  = FileHandle.nullDevice
                 try? child.run()
-                print("Daemon started (PID \(child.processIdentifier)). Running in the background.")
+                print("Daemon started. Running in the background.")
                 return
             }
             await runCollector(interval: interval)
