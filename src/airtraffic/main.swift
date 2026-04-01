@@ -63,8 +63,6 @@ struct Airtraffic {
         // Open /dev/tty directly so output always goes to the terminal
         // even when swift run has piped stdout/stderr.
         let tty = openTTY()
-        ttyWrite(tty, "AirTraffic – live per-app network usage (Ctrl+C to quit)\n")
-        ttyWrite(tty, "Refreshing every \(Int(interval))s…\n\n")
 
         let topN = 20
         var renderedLines: Int? = nil
@@ -276,6 +274,9 @@ struct Airtraffic {
         includeFooter: Bool
     ) -> [String] {
         var lines: [String] = []
+        lines.append("AirTraffic – live per-app network usage (Ctrl+C to quit)")
+        lines.append("Refreshing every \(Int(interval))s…")
+        lines.append("")
         lines.append(contentsOf: headerLines())
 
         for row in display.prefix(topN) {
@@ -304,11 +305,17 @@ struct Airtraffic {
 
     static func writeFrame(_ tty: FileHandle, _ lines: [String], moveUp: Int?) {
         var out = ""
+        // Move cursor up to the start of the previous frame.
         if let moveUp, moveUp > 0 {
             out += "\u{1B}[\(moveUp)A"
         }
-        for line in lines {
-            out += "\u{1B}[2K\r\(line)\n"
+        for (i, line) in lines.enumerated() {
+            // Clear entire line, go to column 0, write content.
+            out += "\u{1B}[2K\r\(line)"
+            // Move down to next line (except after the last line).
+            if i < lines.count - 1 {
+                out += "\n"
+            }
         }
         ttyWrite(tty, out)
     }
