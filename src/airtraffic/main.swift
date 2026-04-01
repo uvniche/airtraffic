@@ -60,11 +60,7 @@ struct Airtraffic {
         var lastSnapshot: [String: (bytesIn: UInt64, bytesOut: UInt64)] = [:]
         let nettop = NettopParser()
         let appResolver = AppNameResolver()
-
-        // Open /dev/tty directly so output always goes to the terminal
-        // even when swift run has piped stdout/stderr.
         let tty = openTTY()
-
         let topN = 20
 
         if once {
@@ -84,6 +80,16 @@ struct Airtraffic {
             }
             return
         }
+
+        // Enter alternate screen buffer — like top/htop, keeps main scrollback clean
+        ttyWrite(tty, "\u{1B}[?1049h")
+        // Restore on Ctrl+C
+        let sigHandler: @convention(c) (Int32) -> Void = { _ in
+            let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
+            if let d = "\u{1B}[?1049l".data(using: .utf8) { restoreTTY.write(d) }
+            exit(0)
+        }
+        signal(SIGINT, sigHandler)
 
         while true {
             do {
@@ -108,7 +114,7 @@ struct Airtraffic {
                 let nonZero = deltas.filter { $0.bytesIn > 0 || $0.bytesOut > 0 }
                 let display = nonZero.isEmpty ? Array(deltas.prefix(topN)) : Array(nonZero.prefix(topN))
 
-                var out = "\u{1B}[2J\u{1B}[H"  // clear screen, cursor to top
+                var out = "\u{1B}[H\u{1B}[J"  // cursor home + erase to end (within alternate buffer)
                 out += "AirTraffic – live per-app network usage\n"
                 out += "\n"
                 out += headerLines().joined(separator: "\n") + "\n"
@@ -119,7 +125,7 @@ struct Airtraffic {
                 out += "Ctrl+C to quit"
                 ttyWrite(tty, out)
             } catch {
-                fputs("Error: \(error)\n", stderr)
+                ttyWrite(tty, "Error: \(error)\n")
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
@@ -547,10 +553,18 @@ extension Airtraffic {
         let topN = 30
         let tty = openTTY()
 
+        ttyWrite(tty, "\u{1B}[?1049h")
+        let sigHandler: @convention(c) (Int32) -> Void = { _ in
+            let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
+            if let d = "\u{1B}[?1049l".data(using: .utf8) { restoreTTY.write(d) }
+            exit(0)
+        }
+        signal(SIGINT, sigHandler)
+
         while true {
             if let (title, apps) = dataProvider() {
                 let display = Array(apps.prefix(topN))
-                var out = "\u{1B}[2J\u{1B}[H"  // clear screen, cursor to top
+                var out = "\u{1B}[H\u{1B}[J"
                 out += title + "\n"
                 out += "\n"
                 for line in cumulativeHeaderLines() { out += line + "\n" }
@@ -561,7 +575,7 @@ extension Airtraffic {
                 out += "Ctrl+C to quit"
                 ttyWrite(tty, out)
             } else {
-                ttyWrite(tty, "\u{1B}[2J\u{1B}[HWaiting for data…\n\nCtrl+C to quit")
+                ttyWrite(tty, "\u{1B}[H\u{1B}[JWaiting for data…\n\nCtrl+C to quit")
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
