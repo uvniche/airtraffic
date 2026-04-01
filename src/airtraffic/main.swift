@@ -60,19 +60,20 @@ struct Airtraffic {
         let nettop = NettopParser()
         let appResolver = AppNameResolver()
 
-        print("AirTraffic – live per-app network usage (Ctrl+C to quit)")
-        print("Refreshing every \(Int(interval))s…\n")
+        // Open /dev/tty directly so output always goes to the terminal
+        // even when swift run has piped stdout/stderr.
+        let tty = openTTY()
+        ttyWrite(tty, "AirTraffic – live per-app network usage (Ctrl+C to quit)\n")
+        ttyWrite(tty, "Refreshing every \(Int(interval))s…\n\n")
 
         let topN = 20
-        // swift run pipes stdout, so check stderr (fd 2) which stays attached to the terminal.
-        let isTTY = isatty(STDOUT_FILENO) != 0 || isatty(STDERR_FILENO) != 0
         var renderedLines: Int? = nil
 
         if once {
             do {
                 let rows = try nettop.sample()
                 guard !rows.isEmpty else {
-                    print("No network data available from nettop.")
+                    ttyWrite(tty, "No network data available from nettop.\n")
                     return
                 }
                 let byApp = aggregateByApp(rows, resolver: appResolver)
@@ -83,13 +84,9 @@ struct Airtraffic {
                     interval: interval,
                     includeFooter: false
                 )
-                if isTTY {
-                    writeFrame(lines, moveUp: nil)
-                } else {
-                    for line in lines { print(line) }
-                }
+                writeFrame(tty, lines, moveUp: nil)
             } catch {
-                fputs("Error: \(error)\n", stderr)
+                ttyWrite(tty, "Error: \(error)\n")
             }
             return
         }
@@ -129,12 +126,8 @@ struct Airtraffic {
                     includeFooter: true
                 )
 
-                if isTTY {
-                    writeFrame(lines, moveUp: renderedLines)
-                    renderedLines = lines.count
-                } else {
-                    for line in lines { print(line) }
-                }
+                writeFrame(tty, lines, moveUp: renderedLines)
+                renderedLines = lines.count
             } catch {
                 fputs("Error: \(error)\n", stderr)
             }
@@ -296,16 +289,28 @@ struct Airtraffic {
         return lines
     }
 
-    static func writeFrame(_ lines: [String], moveUp: Int?) {
-        // Overwrite the previously-rendered table in place (no scrolling).
+    /// Open /dev/tty for direct terminal output, bypassing any pipes from swift run.
+    /// Falls back to stdout if /dev/tty is unavailable (e.g. in CI).
+    static func openTTY() -> FileHandle {
+        if let tty = FileHandle(forWritingAtPath: "/dev/tty") { return tty }
+        return FileHandle.standardOutput
+    }
+
+    static func ttyWrite(_ tty: FileHandle, _ s: String) {
+        if let data = s.data(using: .utf8) {
+            tty.write(data)
+        }
+    }
+
+    static func writeFrame(_ tty: FileHandle, _ lines: [String], moveUp: Int?) {
+        var out = ""
         if let moveUp, moveUp > 0 {
-            print("\u{1B}[\(moveUp)A", terminator: "")
+            out += "\u{1B}[\(moveUp)A"
         }
         for line in lines {
-            // Clear line and write new content.
-            print("\u{1B}[2K\r\(line)")
+            out += "\u{1B}[2K\r\(line)\n"
         }
-        fflush(stdout)
+        ttyWrite(tty, out)
     }
 
     static func formatBytes(_ bytes: UInt64) -> String {
@@ -550,26 +555,18 @@ extension Airtraffic {
         dataProvider: () -> (title: String, apps: [(name: String, bytesIn: UInt64, bytesOut: UInt64)])?
     ) async {
         let interval: TimeInterval = 2.0
-        let isTTY = isatty(STDOUT_FILENO) != 0 || isatty(STDERR_FILENO) != 0
+        let tty = openTTY()
         var renderedLines: Int? = nil
 
         while true {
             if let (title, apps) = dataProvider() {
                 let lines = renderCumulativeLines(title: title, apps: apps)
-                if isTTY {
-                    writeFrame(lines, moveUp: renderedLines)
-                    renderedLines = lines.count
-                } else {
-                    for line in lines { print(line) }
-                }
+                writeFrame(tty, lines, moveUp: renderedLines)
+                renderedLines = lines.count
             } else {
                 let placeholder = ["Waiting for data… (Ctrl+C to quit)"]
-                if isTTY {
-                    writeFrame(placeholder, moveUp: renderedLines)
-                    renderedLines = placeholder.count
-                } else {
-                    print(placeholder[0])
-                }
+                writeFrame(tty, placeholder, moveUp: renderedLines)
+                renderedLines = placeholder.count
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
