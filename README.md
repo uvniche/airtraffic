@@ -31,7 +31,7 @@ swift run airtraffic daemon
 swift run airtraffic status
 ```
 
-**live** – live per-app view, refresh every 2 seconds:
+**live** – live per-app view, refresh every second:
 
 ```bash
 swift run airtraffic live
