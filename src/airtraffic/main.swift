@@ -21,17 +21,17 @@ struct Airtraffic {
         }
 
         if primary == "today" {
-            TodayCommand().run()
+            await TodayCommand().run()
             return
         }
 
         if primary == "month" {
-            MonthCommand().run()
+            await MonthCommand().run()
             return
         }
 
         if primary == "since" {
-            SinceCommand(args: Array(args.dropFirst())).run()
+            await SinceCommand(args: Array(args.dropFirst())).run()
             return
         }
 
@@ -469,63 +469,113 @@ struct StatusCommand {
     }
 }
 
+// MARK: - Shared live-table helpers for cumulative views
+
+extension Airtraffic {
+    static func cumulativeHeaderLines() -> [String] {
+        let app  = fit("App",   width: colName)
+        let down = fit("↓ Down", width: colDown)
+        let up   = fit("↑ Up",   width: colUp)
+        let tot  = fit("Total",  width: colTotal)
+        return [
+            "\(app) \(down) \(up) \(tot)",
+            String(repeating: "─", count: colName + 1 + colDown + 1 + colUp + 1 + colTotal),
+        ]
+    }
+
+    static func cumulativeRowLine(name: String, bytesIn: UInt64, bytesOut: UInt64) -> String {
+        let nameCol = fit(name, width: colName)
+        let downStr = formatBytes(bytesIn)
+        let upStr   = formatBytes(bytesOut)
+        let totStr  = formatBytes(bytesIn + bytesOut)
+        return "\(nameCol) \(fit(downStr, width: colDown)) \(fit(upStr, width: colUp)) \(fit(totStr, width: colTotal))"
+    }
+
+    static func renderCumulativeLines(
+        title: String,
+        apps: [(name: String, bytesIn: UInt64, bytesOut: UInt64)]
+    ) -> [String] {
+        var lines: [String] = []
+        lines.append(title)
+        lines.append(contentsOf: cumulativeHeaderLines())
+        let topN = 30
+        for i in 0..<topN {
+            if i < apps.count {
+                let r = apps[i]
+                lines.append(cumulativeRowLine(name: r.name, bytesIn: r.bytesIn, bytesOut: r.bytesOut))
+            } else {
+                lines.append("")
+            }
+        }
+        lines.append("")
+        lines.append("(Updating every 2s. Ctrl+C to quit)")
+        return lines
+    }
+
+    /// Shared live-refresh loop for cumulative views (today / month / since).
+    /// `dataProvider` returns (title, sorted apps) each tick, or nil if no data yet.
+    static func runLiveCumulative(
+        dataProvider: () -> (title: String, apps: [(name: String, bytesIn: UInt64, bytesOut: UInt64)])?
+    ) async {
+        let interval: TimeInterval = 2.0
+        let isTTY = isatty(STDOUT_FILENO) != 0
+        var renderedLines: Int? = nil
+
+        while true {
+            if let (title, apps) = dataProvider() {
+                let lines = renderCumulativeLines(title: title, apps: apps)
+                if isTTY {
+                    writeFrame(lines, moveUp: renderedLines)
+                    renderedLines = lines.count
+                } else {
+                    for line in lines { print(line) }
+                }
+            } else {
+                let placeholder = ["Waiting for data… (Ctrl+C to quit)"]
+                if isTTY {
+                    writeFrame(placeholder, moveUp: renderedLines)
+                    renderedLines = placeholder.count
+                } else {
+                    print(placeholder[0])
+                }
+            }
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+    }
+}
+
+// MARK: - Commands
+
 /// `airtraffic today`
 struct TodayCommand {
-    func run() {
-        guard let state = AirtrafficState.load() else {
-            print("No usage data recorded yet.")
-            return
-        }
-        let now = Date()
-        if !Calendar.current.isDate(now, inSameDayAs: state.todayStart) {
-            print("No data for today yet.")
-            return
-        }
-
-        let apps = state.todayByApp.sorted { lhs, rhs in
-            let l = lhs.value.bytesIn + lhs.value.bytesOut
-            let r = rhs.value.bytesIn + rhs.value.bytesOut
-            return l > r
-        }
-        if apps.isEmpty {
-            print("No data recorded for today yet.")
-            return
-        }
-
-        print("Per-app usage since midnight:")
-        for (name, usage) in apps {
-            let total = usage.bytesIn + usage.bytesOut
-            print("- \(name): \(Airtraffic.formatBytes(total)) (↓ \(Airtraffic.formatBytes(usage.bytesIn)), ↑ \(Airtraffic.formatBytes(usage.bytesOut)))")
+    func run() async {
+        await Airtraffic.runLiveCumulative {
+            guard let state = AirtrafficState.load() else { return nil }
+            let now = Date()
+            guard Calendar.current.isDate(now, inSameDayAs: state.todayStart) else { return nil }
+            guard !state.todayByApp.isEmpty else { return nil }
+            let apps = state.todayByApp
+                .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
+                .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+            return ("Per-app usage since midnight (cumulative):", apps)
         }
     }
 }
 
 /// `airtraffic month`
 struct MonthCommand {
-    func run() {
-        guard let state = AirtrafficState.load(),
-              let monthStart = state.monthStart else {
-            print("No monthly data recorded yet.")
-            return
-        }
-
-        let apps = state.monthByApp.sorted { lhs, rhs in
-            let l = lhs.value.bytesIn + lhs.value.bytesOut
-            let r = rhs.value.bytesIn + rhs.value.bytesOut
-            return l > r
-        }
-        if apps.isEmpty {
-            print("No data recorded for this month yet.")
-            return
-        }
-
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        print("Per-app usage since start of month (\(formatter.string(from: monthStart))):")
-        for (name, usage) in apps {
-            let total = usage.bytesIn + usage.bytesOut
-            print("- \(name): \(Airtraffic.formatBytes(total)) (↓ \(Airtraffic.formatBytes(usage.bytesIn)), ↑ \(Airtraffic.formatBytes(usage.bytesOut)))")
+    func run() async {
+        await Airtraffic.runLiveCumulative {
+            guard let state = AirtrafficState.load(),
+                  let monthStart = state.monthStart else { return nil }
+            guard !state.monthByApp.isEmpty else { return nil }
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .short
+            let apps = state.monthByApp
+                .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
+                .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+            return ("Per-app usage since \(formatter.string(from: monthStart)) (cumulative):", apps)
         }
     }
 }
@@ -534,7 +584,7 @@ struct MonthCommand {
 struct SinceCommand {
     let args: [String]
 
-    func run() {
+    func run() async {
         guard !args.isEmpty else {
             print("Usage: airtraffic since dd:MM:yyyy HH:mm")
             return
@@ -550,39 +600,32 @@ struct SinceCommand {
             return
         }
 
+        // Set / reset the since window in persisted state.
         var state = AirtrafficState.load() ?? AirtrafficState.empty(now: Date())
-        state.sinceStart = sinceDate
-        state.sinceByApp = [:]
-        state.persist()
+        let isNewWindow = state.sinceStart != sinceDate
+        if isNewWindow {
+            state.sinceStart = sinceDate
+            state.sinceByApp = [:]
+            state.persist()
+        }
 
-        // If we don't yet have any accumulated data for this since-period, inform the user.
         let now = Date()
         if now <= sinceDate {
             print("Since-period starts in the future (\(formatter.string(from: sinceDate))). No data yet.")
             return
         }
 
-        // If collector hasn't yet accumulated since-data, tell the user it will start from now.
-        if state.sinceByApp.isEmpty {
-            print("Initialized custom 'since' window at \(formatter.string(from: sinceDate)).")
-            print("The daemon will accumulate usage from now onward for this window.")
-            return
-        }
+        let displayFormatter = DateFormatter()
+        displayFormatter.dateStyle = .medium
+        displayFormatter.timeStyle = .short
 
-        let apps = state.sinceByApp.sorted { lhs, rhs in
-            let l = lhs.value.bytesIn + lhs.value.bytesOut
-            let r = rhs.value.bytesIn + rhs.value.bytesOut
-            return l > r
-        }
-        if apps.isEmpty {
-            print("No data recorded for the requested period yet.")
-            return
-        }
-
-        print("Per-app usage since \(formatter.string(from: sinceDate)):")
-        for (name, usage) in apps {
-            let total = usage.bytesIn + usage.bytesOut
-            print("- \(name): \(Airtraffic.formatBytes(total)) (↓ \(Airtraffic.formatBytes(usage.bytesIn)), ↑ \(Airtraffic.formatBytes(usage.bytesOut)))")
+        await Airtraffic.runLiveCumulative {
+            guard let s = AirtrafficState.load() else { return nil }
+            guard !s.sinceByApp.isEmpty else { return nil }
+            let apps = s.sinceByApp
+                .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
+                .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+            return ("Per-app usage since \(displayFormatter.string(from: sinceDate)) (cumulative):", apps)
         }
     }
 }
