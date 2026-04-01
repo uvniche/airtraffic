@@ -63,7 +63,8 @@ struct Airtraffic {
         print("Refreshing every \(Int(interval))s…\n")
 
         let topN = 20
-        let isTTY = isatty(STDOUT_FILENO) != 0
+        // swift run pipes stdout, so check stderr (fd 2) which stays attached to the terminal.
+        let isTTY = isatty(STDOUT_FILENO) != 0 || isatty(STDERR_FILENO) != 0
         var renderedLines: Int? = nil
 
         if once {
@@ -281,13 +282,8 @@ struct Airtraffic {
         var lines: [String] = []
         lines.append(contentsOf: headerLines())
 
-        for i in 0..<topN {
-            if i < display.count {
-                let row = display[i]
-                lines.append(rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval))
-            } else {
-                lines.append("")
-            }
+        for row in display.prefix(topN) {
+            lines.append(rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval))
         }
 
         if includeFooter {
@@ -509,17 +505,12 @@ extension Airtraffic {
         title: String,
         apps: [(name: String, bytesIn: UInt64, bytesOut: UInt64)]
     ) -> [String] {
+        let topN = 30
         var lines: [String] = []
         lines.append(title)
         lines.append(contentsOf: cumulativeHeaderLines())
-        let topN = 30
-        for i in 0..<topN {
-            if i < apps.count {
-                let r = apps[i]
-                lines.append(cumulativeRowLine(name: r.name, bytesIn: r.bytesIn, bytesOut: r.bytesOut))
-            } else {
-                lines.append("")
-            }
+        for r in apps.prefix(topN) {
+            lines.append(cumulativeRowLine(name: r.name, bytesIn: r.bytesIn, bytesOut: r.bytesOut))
         }
         lines.append("")
         lines.append("(Updating every 2s. Ctrl+C to quit)")
@@ -532,7 +523,7 @@ extension Airtraffic {
         dataProvider: () -> (title: String, apps: [(name: String, bytesIn: UInt64, bytesOut: UInt64)])?
     ) async {
         let interval: TimeInterval = 2.0
-        let isTTY = isatty(STDOUT_FILENO) != 0
+        let isTTY = isatty(STDOUT_FILENO) != 0 || isatty(STDERR_FILENO) != 0
         var renderedLines: Int? = nil
 
         while true {
