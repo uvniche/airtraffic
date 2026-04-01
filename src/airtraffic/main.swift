@@ -11,6 +11,20 @@ struct Airtraffic {
         let once = args.contains("--once") || primary == "once"
 
         if primary == "daemon" {
+            // If we're not already the detached child, re-launch ourselves in the
+            // background and return immediately so the terminal is free.
+            if args.last != "--daemonized" {
+                let exe = CommandLine.arguments[0]
+                let child = Process()
+                child.executableURL = URL(fileURLWithPath: exe)
+                child.arguments = ["daemon", "--daemonized"]
+                child.standardInput  = FileHandle.nullDevice
+                child.standardOutput = FileHandle.nullDevice
+                child.standardError  = FileHandle.nullDevice
+                try? child.run()
+                print("Daemon started (PID \(child.processIdentifier)). Running in the background.")
+                return
+            }
             await runCollector(interval: interval)
             return
         }
