@@ -5,7 +5,7 @@ import AppKit
 @main
 struct Airtraffic {
     static func main() async {
-        let interval: TimeInterval = 2.0
+        let interval: TimeInterval = 1.0
         let args = Array(CommandLine.arguments.dropFirst())
         let primary = args.first
         let once = args.contains("--once") || primary == "once"
@@ -67,8 +67,6 @@ struct Airtraffic {
 
         let topN = 20
 
-        var renderedLines: Int? = nil
-
         if once {
             do {
                 let rows = try nettop.sample()
@@ -86,6 +84,8 @@ struct Airtraffic {
             }
             return
         }
+
+        ttyWrite(tty, "\u{1B}[2J\u{1B}[H")   // clear screen once before loop
 
         while true {
             do {
@@ -124,8 +124,7 @@ struct Airtraffic {
                 frameLines.append("")
                 frameLines.append("(Next refresh in \(Int(interval))s. Ctrl+C to quit)")
 
-                writeFrame(tty, frameLines, moveUp: renderedLines)
-                renderedLines = frameLines.count
+                writeFrame(tty, frameLines, moveUp: nil)
             } catch {
                 fputs("Error: \(error)\n", stderr)
             }
@@ -306,18 +305,10 @@ struct Airtraffic {
 
     static func writeFrame(_ tty: FileHandle, _ lines: [String], moveUp: Int?) {
         var out = ""
-        // Move cursor up to the start of the previous frame, then erase
-        // everything from the cursor to end of screen so no stale lines
-        // from a longer previous frame can bleed through.
-        if let moveUp, moveUp > 0 {
-            out += "\u{1B}[\(moveUp)A"
-        }
+        out += "\u{1B}[H"   // cursor to top-left
         out += "\u{1B}[J"   // erase from cursor to end of screen
-        for (i, line) in lines.enumerated() {
-            out += "\u{1B}[2K\r\(line)"
-            if i < lines.count - 1 {
-                out += "\n"
-            }
+        for line in lines {
+            out += "\(line)\n"
         }
         ttyWrite(tty, out)
     }
