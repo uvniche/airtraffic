@@ -67,12 +67,7 @@ struct Airtraffic {
 
         let topN = 20
 
-        // Print the static chrome once — it never needs to be redrawn.
-        ttyWrite(tty, "AirTraffic – live per-app network usage (Ctrl+C to quit)\n")
-        ttyWrite(tty, "Refreshing every \(Int(interval))s…\n\n")
-        for line in headerLines() { ttyWrite(tty, line + "\n") }
-
-        var renderedDataLines: Int? = nil  // only the mutable rows+footer
+        var renderedLines: Int? = nil
 
         if once {
             do {
@@ -116,15 +111,21 @@ struct Airtraffic {
                 let nonZero = deltas.filter { $0.bytesIn > 0 || $0.bytesOut > 0 }
                 let display = nonZero.isEmpty ? Array(deltas.prefix(topN)) : Array(nonZero.prefix(topN))
 
-                // Build only the mutable data rows + footer.
-                var dataLines: [String] = display.prefix(topN).map {
+                // Build and redraw the full frame each tick so headers remain visible
+                // even when terminal wrapping/resize behavior changes.
+                var frameLines: [String] = []
+                frameLines.append("AirTraffic – live per-app network usage (Ctrl+C to quit)")
+                frameLines.append("Refreshing every \(Int(interval))s…")
+                frameLines.append("")
+                frameLines.append(contentsOf: headerLines())
+                frameLines.append(contentsOf: display.prefix(topN).map {
                     rowLine(name: $0.name, bytesIn: $0.bytesIn, bytesOut: $0.bytesOut, interval: interval)
-                }
-                dataLines.append("")
-                dataLines.append("(Next refresh in \(Int(interval))s. Ctrl+C to quit)")
+                })
+                frameLines.append("")
+                frameLines.append("(Next refresh in \(Int(interval))s. Ctrl+C to quit)")
 
-                writeFrame(tty, dataLines, moveUp: renderedDataLines)
-                renderedDataLines = dataLines.count
+                writeFrame(tty, frameLines, moveUp: renderedLines)
+                renderedLines = frameLines.count
             } catch {
                 fputs("Error: \(error)\n", stderr)
             }
@@ -242,8 +243,8 @@ struct Airtraffic {
 
     static func headerLines() -> [String] {
         let app = fit("App", width: colName)
-        let down = fit("↓ Down", width: colDown)
-        let up = fit("↑ Up", width: colUp)
+        let down = fit("↓ Down/s", width: colDown)
+        let up = fit("↑ Up/s", width: colUp)
         let total = fit("Total/s", width: colTotal)
         return [
             "\(app) \(down) \(up) \(total)",
@@ -256,16 +257,12 @@ struct Airtraffic {
         let outRate = Double(bytesOut) / interval
         let totalRate = inRate + outRate
         let nameCol = fit(name, width: colName)
-        let downStr = "\(formatBytes(bytesIn)) \(formatRate(inRate))"
-        let upStr = "\(formatBytes(bytesOut)) \(formatRate(outRate))"
-        let totalStr = formatRate(totalRate)
-
-        return "\(nameCol) \(fit(downStr, width: colDown)) \(fit(upStr, width: colUp)) \(fit(totalStr, width: colTotal))"
+        return "\(nameCol) \(fit(formatRate(inRate), width: colDown)) \(fit(formatRate(outRate), width: colUp)) \(fit(formatRate(totalRate), width: colTotal))"
     }
 
     private static let colName = 36
-    private static let colDown = 20
-    private static let colUp = 20
+    private static let colDown = 12
+    private static let colUp = 12
     private static let colTotal = 10
 
     static func fit(_ s: String, width: Int) -> String {
