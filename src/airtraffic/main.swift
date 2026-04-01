@@ -66,7 +66,13 @@ struct Airtraffic {
         let tty = openTTY()
 
         let topN = 20
-        var renderedLines: Int? = nil
+
+        // Print the static chrome once — it never needs to be redrawn.
+        ttyWrite(tty, "AirTraffic – live per-app network usage (Ctrl+C to quit)\n")
+        ttyWrite(tty, "Refreshing every \(Int(interval))s…\n\n")
+        for line in headerLines() { ttyWrite(tty, line + "\n") }
+
+        var renderedDataLines: Int? = nil  // only the mutable rows+footer
 
         if once {
             do {
@@ -77,13 +83,9 @@ struct Airtraffic {
                 }
                 let byApp = aggregateByApp(rows, resolver: appResolver)
                 let deltas = byApp.sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
-                let lines = renderLines(
-                    display: Array(deltas.prefix(topN)),
-                    topN: topN,
-                    interval: interval,
-                    includeFooter: false
-                )
-                writeFrame(tty, lines, moveUp: nil)
+                for row in deltas.prefix(topN) {
+                    ttyWrite(tty, rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval) + "\n")
+                }
             } catch {
                 ttyWrite(tty, "Error: \(error)\n")
             }
@@ -98,10 +100,8 @@ struct Airtraffic {
                     continue
                 }
 
-                // Aggregate by app name (sum across all processes of the same app)
                 let byApp = aggregateByApp(rows, resolver: appResolver)
 
-                // Compute deltas if we have a previous snapshot
                 var deltas: [(name: String, bytesIn: UInt64, bytesOut: UInt64)] = byApp.map { row in
                     let (prevIn, prevOut) = lastSnapshot[row.name] ?? (0, 0)
                     let dIn = row.bytesIn >= prevIn ? row.bytesIn - prevIn : row.bytesIn
@@ -111,22 +111,20 @@ struct Airtraffic {
 
                 lastSnapshot = Dictionary(uniqueKeysWithValues: byApp.map { ($0.name, ($0.bytesIn, $0.bytesOut)) })
 
-                // Sort by total bytes (in + out) descending
                 deltas.sort { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
 
-                // Trim to top N and filter zeros if we have enough non-zero
                 let nonZero = deltas.filter { $0.bytesIn > 0 || $0.bytesOut > 0 }
                 let display = nonZero.isEmpty ? Array(deltas.prefix(topN)) : Array(nonZero.prefix(topN))
 
-                let lines = renderLines(
-                    display: display,
-                    topN: topN,
-                    interval: interval,
-                    includeFooter: true
-                )
+                // Build only the mutable data rows + footer.
+                var dataLines: [String] = display.prefix(topN).map {
+                    rowLine(name: $0.name, bytesIn: $0.bytesIn, bytesOut: $0.bytesOut, interval: interval)
+                }
+                dataLines.append("")
+                dataLines.append("(Next refresh in \(Int(interval))s. Ctrl+C to quit)")
 
-                writeFrame(tty, lines, moveUp: renderedLines)
-                renderedLines = lines.count
+                writeFrame(tty, dataLines, moveUp: renderedDataLines)
+                renderedDataLines = dataLines.count
             } catch {
                 fputs("Error: \(error)\n", stderr)
             }
@@ -275,16 +273,9 @@ struct Airtraffic {
         interval: TimeInterval,
         includeFooter: Bool
     ) -> [String] {
-        var lines: [String] = []
-        lines.append("AirTraffic – live per-app network usage (Ctrl+C to quit)")
-        lines.append("Refreshing every \(Int(interval))s…")
-        lines.append("")
-        lines.append(contentsOf: headerLines())
-
-        for row in display.prefix(topN) {
-            lines.append(rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval))
+        var lines: [String] = display.prefix(topN).map {
+            rowLine(name: $0.name, bytesIn: $0.bytesIn, bytesOut: $0.bytesOut, interval: interval)
         }
-
         if includeFooter {
             lines.append("")
             lines.append("(Next refresh in \(Int(interval))s. Ctrl+C to quit)")
@@ -566,40 +557,35 @@ extension Airtraffic {
         return "\(nameCol) \(fit(downStr, width: colDown)) \(fit(upStr, width: colUp)) \(fit(totStr, width: colTotal))"
     }
 
-    static func renderCumulativeLines(
-        title: String,
-        apps: [(name: String, bytesIn: UInt64, bytesOut: UInt64)]
-    ) -> [String] {
-        let topN = 30
-        var lines: [String] = []
-        lines.append(title)
-        lines.append(contentsOf: cumulativeHeaderLines())
-        for r in apps.prefix(topN) {
-            lines.append(cumulativeRowLine(name: r.name, bytesIn: r.bytesIn, bytesOut: r.bytesOut))
-        }
-        lines.append("")
-        lines.append("(Updating every 2s. Ctrl+C to quit)")
-        return lines
-    }
-
     /// Shared live-refresh loop for cumulative views (today / month / since).
-    /// `dataProvider` returns (title, sorted apps) each tick, or nil if no data yet.
+    /// Prints title + column headers once; only redraws the data rows each tick.
     static func runLiveCumulative(
         dataProvider: () -> (title: String, apps: [(name: String, bytesIn: UInt64, bytesOut: UInt64)])?
     ) async {
         let interval: TimeInterval = 2.0
+        let topN = 30
         let tty = openTTY()
-        var renderedLines: Int? = nil
+        var headerPrinted = false
+        var renderedDataLines: Int? = nil
 
         while true {
             if let (title, apps) = dataProvider() {
-                let lines = renderCumulativeLines(title: title, apps: apps)
-                writeFrame(tty, lines, moveUp: renderedLines)
-                renderedLines = lines.count
+                if !headerPrinted {
+                    ttyWrite(tty, title + "\n")
+                    for line in cumulativeHeaderLines() { ttyWrite(tty, line + "\n") }
+                    headerPrinted = true
+                }
+                var dataLines = apps.prefix(topN).map {
+                    cumulativeRowLine(name: $0.name, bytesIn: $0.bytesIn, bytesOut: $0.bytesOut)
+                }
+                dataLines.append("")
+                dataLines.append("(Updating every 2s. Ctrl+C to quit)")
+                writeFrame(tty, dataLines, moveUp: renderedDataLines)
+                renderedDataLines = dataLines.count
             } else {
                 let placeholder = ["Waiting for data… (Ctrl+C to quit)"]
-                writeFrame(tty, placeholder, moveUp: renderedLines)
-                renderedLines = placeholder.count
+                writeFrame(tty, placeholder, moveUp: renderedDataLines)
+                renderedDataLines = placeholder.count
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
