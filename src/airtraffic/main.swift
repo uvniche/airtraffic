@@ -315,24 +315,24 @@ struct Airtraffic {
     }
 
     static func formatBytes(_ bytes: UInt64) -> String {
-        if bytes >= 1_073_741_824 {
-            return String(format: "%.2f GiB", Double(bytes) / 1_073_741_824)
-        } else if bytes >= 1_048_576 {
-            return String(format: "%.2f MiB", Double(bytes) / 1_048_576)
-        } else if bytes >= 1024 {
-            return String(format: "%.2f KiB", Double(bytes) / 1024)
+        if bytes >= 1_000_000_000 {
+            return String(format: "%.2f GB", Double(bytes) / 1_000_000_000)
+        } else if bytes >= 1_000_000 {
+            return String(format: "%.2f MB", Double(bytes) / 1_000_000)
+        } else if bytes >= 1000 {
+            return String(format: "%.2f KB", Double(bytes) / 1000)
         } else {
             return "\(bytes) B"
         }
     }
 
     static func formatRate(_ bytesPerSec: Double) -> String {
-        if bytesPerSec >= 1_073_741_824 {
-            return String(format: "%.2f GiB/s", bytesPerSec / 1_073_741_824)
-        } else if bytesPerSec >= 1_048_576 {
-            return String(format: "%.2f MiB/s", bytesPerSec / 1_048_576)
-        } else if bytesPerSec >= 1024 {
-            return String(format: "%.2f KiB/s", bytesPerSec / 1024)
+        if bytesPerSec >= 1_000_000_000 {
+            return String(format: "%.2f GB/s", bytesPerSec / 1_000_000_000)
+        } else if bytesPerSec >= 1_000_000 {
+            return String(format: "%.2f MB/s", bytesPerSec / 1_000_000)
+        } else if bytesPerSec >= 1000 {
+            return String(format: "%.2f KB/s", bytesPerSec / 1000)
         } else {
             return String(format: "%.0f B/s", bytesPerSec)
         }
