@@ -7,17 +7,17 @@ macOS CLI Network App
 - **macOS 13+** (Ventura or later)
 - **Xcode Command Line Tools** (or Xcode). Install with: `xcode-select --install`
 
-## Build & run
+## Build & Run
 
 From the project directory:
-
-Build:
 
 ```bash
 swift build
 ```
 
-### Commands
+## Commands
+
+### Daemon
 
 **daemon** – start the daemon and install a login item so it runs at login:
 
@@ -30,6 +30,14 @@ swift run airtraffic daemon
 ```bash
 swift run airtraffic status
 ```
+
+**uninstall** – remove the login item and delete all stored data:
+
+```bash
+swift run airtraffic uninstall
+```
+
+### Usage
 
 **live** – live per-app view, refresh every second:
 
@@ -53,12 +61,6 @@ swift run airtraffic month
 
 ```bash
 swift run airtraffic since 01:01:2026 00:00
-```
-
-**uninstall** – remove the login item and delete all stored data:
-
-```bash
-swift run airtraffic uninstall
 ```
 
 ## License
