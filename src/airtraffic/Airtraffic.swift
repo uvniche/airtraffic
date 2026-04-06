@@ -189,6 +189,7 @@ struct Airtraffic {
         while true {
             autoreleasepool {
                 do {
+                    state.reloadMutableConfig()
                     let rows = try nettop.sample()
                     guard !rows.isEmpty else { return }
                     let byApp = aggregateByApp(rows, resolver: resolver)
