@@ -241,14 +241,26 @@ struct Airtraffic {
         return sum.map { (name: $0.value.displayName, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
     }
 
-    /// Filter noisy system discovery traffic that is not useful in user-facing usage tables.
+    /// Filter noisy or transient processes that are not useful in user-facing usage tables.
     static func shouldIgnoreAppFromUsageTables(_ appName: String) -> Bool {
         let normalized = appName
             .lowercased()
             .replacingOccurrences(of: " ", with: "")
             .replacingOccurrences(of: "-", with: "")
             .replacingOccurrences(of: "_", with: "")
-        return normalized.contains("mdnsresponder") || normalized.contains("mdnshelper")
+
+        if normalized.contains("mdnsresponder") || normalized.contains("mdnshelper") {
+            return true
+        }
+
+        // Drop transient CLI invocations — nettop captures the full argv for short-lived
+        // processes (e.g. "npm view vercel version"), which look like multi-word shell commands.
+        // Real app names never contain more than ~3 words; anything with 4+ space-separated
+        // tokens is almost certainly a CLI command, not a persistent app.
+        let wordCount = appName.split(separator: " ").count
+        if wordCount >= 4 { return true }
+
+        return false
     }
 
     static func headerLines() -> [String] {
@@ -862,14 +874,11 @@ final class AppNameResolver {
         defer { lock.unlock() }
         if let cached = cache[pid] { return cached }
         let raw: String
-        let bundleID: String?
         if let app = NSRunningApplication(processIdentifier: pid) {
             raw = app.localizedName ?? app.executableURL?.lastPathComponent ?? stripPID(from: fallbackProcessName)
-            bundleID = app.bundleIdentifier
         } else {
             // nettop truncates process names to 16 chars; use proc_pidpath for the full executable name.
             raw = executableName(forPID: pid) ?? stripPID(from: fallbackProcessName)
-            bundleID = nil
         }
         let displayName = friendlyName(raw)
         // Use displayName as the group key so that a main app (which has a bundle ID) and
