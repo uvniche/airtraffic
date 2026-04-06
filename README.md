@@ -69,6 +69,28 @@ swift run airtraffic since 01:01:2026 00:00
 swift run airtraffic export today
 ```
 
+### Limits
+
+**limit** – set a daily data cap (overall or per-app). Sends a macOS notification when exceeded:
+
+```bash
+swift run airtraffic limit 2GB
+swift run airtraffic limit "Google Chrome" 500MB
+```
+
+**limits** – show all active limits with current usage vs cap:
+
+```bash
+swift run airtraffic limits
+```
+
+**limit clear** – remove a limit:
+
+```bash
+swift run airtraffic limit clear 2GB
+swift run airtraffic limit clear "Google Chrome"
+```
+
 ## License
 
 MIT
