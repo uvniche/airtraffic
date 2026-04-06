@@ -145,10 +145,10 @@ struct SinceCommand {
 struct ExportCommand {
     let args: [String]
 
-    /// ~/airtraffic/ — all CSV exports land here.
+    /// <repo>/exports/ — all CSV exports land here.
     static var exportDir: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("airtraffic", isDirectory: true)
+        URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("exports", isDirectory: true)
     }
 
     func run() {
