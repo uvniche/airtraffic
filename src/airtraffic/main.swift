@@ -1,6 +1,7 @@
 import Foundation
 import Darwin
 import AppKit
+import UserNotifications
 
 @main
 struct Airtraffic {
@@ -53,6 +54,16 @@ struct Airtraffic {
 
         if primary == "export" {
             ExportCommand(args: Array(args.dropFirst())).run()
+            return
+        }
+
+        if primary == "limit" {
+            LimitCommand(args: Array(args.dropFirst())).run()
+            return
+        }
+
+        if primary == "limits" {
+            LimitsCommand().run()
             return
         }
 
@@ -141,6 +152,24 @@ struct Airtraffic {
         }
     }
 
+    /// Fires a macOS local notification. Requests permission on first call.
+    static func sendLimitNotification(title: String, body: String) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = .default
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil
+            )
+            center.add(request)
+        }
+    }
+
     /// Background collector: periodically samples nettop and persists per-app usage.
     static func runCollector(interval: TimeInterval) async {
         LoginItemInstaller.ensureInstalledIfNeeded()
@@ -215,6 +244,34 @@ struct Airtraffic {
 
                     state.lastUpdate = now
                     state.persist()
+
+                    // Check per-app limits.
+                    for (app, cap) in state.limits {
+                        guard !state.notifiedLimits.contains(app) else { continue }
+                        let usage = state.todayByApp[app]
+                        let used = (usage?.bytesIn ?? 0) + (usage?.bytesOut ?? 0)
+                        if used >= cap {
+                            sendLimitNotification(
+                                title: "\(app) data limit reached",
+                                body: "\(app) has used \(formatBytesLimit(used)) today (limit: \(formatBytesLimit(cap)))."
+                            )
+                            state.notifiedLimits.insert(app)
+                            state.persist()
+                        }
+                    }
+
+                    // Check overall daily limit.
+                    if let totalCap = state.totalLimit, !state.notifiedLimits.contains("__total__") {
+                        let totalUsed = state.todayByApp.values.reduce(UInt64(0)) { $0 + $1.bytesIn + $1.bytesOut }
+                        if totalUsed >= totalCap {
+                            sendLimitNotification(
+                                title: "Daily data limit reached",
+                                body: "Total usage today is \(formatBytesLimit(totalUsed)) (limit: \(formatBytesLimit(totalCap)))."
+                            )
+                            state.notifiedLimits.insert("__total__")
+                            state.persist()
+                        }
+                    }
                 } catch {
                     // If nettop fails, quietly exit collector.
                     return
@@ -410,6 +467,14 @@ struct AirtrafficState: Codable {
     var sinceStart: Date?
     var sinceByApp: [String: AppUsage] = [:]
 
+    /// Per-app daily byte limits keyed by app display name.
+    var limits: [String: UInt64] = [:]
+    /// Optional overall daily byte limit across all apps.
+    var totalLimit: UInt64? = nil
+    /// Tracks which limit keys have already triggered a notification today.
+    /// Uses app name for per-app limits and the special key "__total__" for the overall limit.
+    var notifiedLimits: Set<String> = []
+
     static func empty(now: Date) -> AirtrafficState {
         let calendar = Calendar.current
         let midnight = calendar.startOfDay(for: now)
@@ -431,6 +496,7 @@ struct AirtrafficState: Codable {
         let calendar = Calendar.current
         todayStart = calendar.startOfDay(for: now)
         todayByApp = [:]
+        notifiedLimits = []
     }
 
     static func stateURL() -> URL {
@@ -736,6 +802,157 @@ struct ExportCommand {
             print("\(name),\(row.bytesIn),\(row.bytesOut),\(row.bytesIn + row.bytesOut)")
         }
     }
+}
+
+/// Parses human-readable byte strings like "500MB", "2GB", "1.5 GB" into bytes.
+func parseBytes(_ s: String) -> UInt64? {
+    let cleaned = s.trimmingCharacters(in: .whitespaces).uppercased()
+        .replacingOccurrences(of: " ", with: "")
+    let units: [(suffix: String, multiplier: UInt64)] = [
+        ("GB", 1_000_000_000),
+        ("MB", 1_000_000),
+        ("KB", 1_000),
+        ("B",  1),
+    ]
+    for (suffix, multiplier) in units {
+        if cleaned.hasSuffix(suffix) {
+            let numStr = String(cleaned.dropLast(suffix.count))
+            if let value = Double(numStr), value > 0 {
+                return UInt64(value * Double(multiplier))
+            }
+        }
+    }
+    return nil
+}
+
+/// `airtraffic limit <app> <threshold>` or `airtraffic limit --total <threshold>`
+/// `airtraffic limit clear <app>` or `airtraffic limit clear --total`
+struct LimitCommand {
+    let args: [String]
+
+    func run() {
+        guard !args.isEmpty else {
+            printUsage()
+            return
+        }
+
+        var state = AirtrafficState.load() ?? AirtrafficState.empty(now: Date())
+
+        // limit clear <app|--total|bare-size>
+        if args.first == "clear" {
+            let rest = Array(args.dropFirst())
+            let target = rest.joined(separator: " ")
+            if target == "--total" || (rest.count == 1 && parseBytes(rest[0]) != nil) {
+                state.totalLimit = nil
+                state.notifiedLimits.remove("__total__")
+                state.persist()
+                print("Overall daily limit cleared.")
+            } else if target.isEmpty {
+                printUsage()
+            } else {
+                state.limits.removeValue(forKey: target)
+                state.notifiedLimits.remove(target)
+                state.persist()
+                print("Limit cleared for \(target).")
+            }
+            return
+        }
+
+        // limit --total <threshold>
+        if args.first == "--total" {
+            guard args.count >= 2, let bytes = parseBytes(args[1]) else {
+                print("Usage: airtraffic limit --total <threshold>  (e.g. 2GB, 500MB)")
+                return
+            }
+            state.totalLimit = bytes
+            state.notifiedLimits.remove("__total__")
+            state.persist()
+            print("Overall daily limit set to \(formatBytesLimit(bytes)).")
+            return
+        }
+
+        // limit <threshold> — single bare size treated as overall limit
+        if args.count == 1, let bytes = parseBytes(args[0]) {
+            state.totalLimit = bytes
+            state.notifiedLimits.remove("__total__")
+            state.persist()
+            print("Overall daily limit set to \(formatBytesLimit(bytes)).")
+            return
+        }
+
+        // limit <app> <threshold>
+        guard args.count >= 2 else { printUsage(); return }
+        let threshold = args.last!
+        let appName = args.dropLast().joined(separator: " ")
+        guard let bytes = parseBytes(threshold) else {
+            print("Could not parse '\(threshold)'. Use e.g. 500MB or 2GB.")
+            return
+        }
+        state.limits[appName] = bytes
+        state.notifiedLimits.remove(appName)
+        state.persist()
+        print("Daily limit for \(appName) set to \(formatBytesLimit(bytes)).")
+    }
+
+    private func printUsage() {
+        print("""
+        Usage:
+          airtraffic limit <app> <threshold>      e.g. airtraffic limit "Google Chrome" 500MB
+          airtraffic limit --total <threshold>    e.g. airtraffic limit --total 2GB
+          airtraffic limit clear <app>            remove a per-app limit
+          airtraffic limit clear --total          remove the overall limit
+        """)
+    }
+}
+
+/// `airtraffic limits` – list all active limits with current daily usage.
+struct LimitsCommand {
+    func run() {
+        guard let state = AirtrafficState.load() else {
+            print("No data yet. Is the daemon running? Try: airtraffic daemon")
+            return
+        }
+
+        let hasPerApp = !state.limits.isEmpty
+        let hasTotal = state.totalLimit != nil
+
+        guard hasPerApp || hasTotal else {
+            print("No limits set. Try: airtraffic limit \"App\" 500MB")
+            return
+        }
+
+        if hasTotal {
+            let cap = state.totalLimit!
+            let used = state.todayByApp.values.reduce(UInt64(0)) { $0 + $1.bytesIn + $1.bytesOut }
+            let pct = min(100, Int(Double(used) / Double(cap) * 100))
+            let status = used >= cap ? " ⚠ EXCEEDED" : ""
+            print("Overall:  \(formatBytesLimit(used)) / \(formatBytesLimit(cap))  (\(pct)%)\(status)")
+        }
+
+        if hasPerApp {
+            if hasTotal { print("") }
+            let sorted = state.limits.sorted { $0.key < $1.key }
+            for (app, cap) in sorted {
+                let usage = state.todayByApp[app]
+                let used = (usage?.bytesIn ?? 0) + (usage?.bytesOut ?? 0)
+                let pct = min(100, Int(Double(used) / Double(cap) * 100))
+                let status = used >= cap ? " ⚠ EXCEEDED" : ""
+                let appCol = app.padding(toLength: 28, withPad: " ", startingAt: 0)
+                print("\(appCol)  \(formatBytesLimit(used)) / \(formatBytesLimit(cap))  (\(pct)%)\(status)")
+            }
+        }
+    }
+}
+
+func formatBytesLimit(_ bytes: UInt64) -> String {
+    if bytes >= 1_000_000_000 {
+        return String(format: "%.2f GB", Double(bytes) / 1_000_000_000)
+    } else if bytes >= 1_000_000 {
+        return String(format: "%.2f MB", Double(bytes) / 1_000_000)
+    } else if bytes >= 1_000 {
+        return String(format: "%.2f KB", Double(bytes) / 1_000)
+    }
+    return "\(bytes) B"
 }
 
 /// `airtraffic uninstall` – remove login item and delete all data.
