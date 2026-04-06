@@ -51,6 +51,11 @@ struct Airtraffic {
             return
         }
 
+        if primary == "export" {
+            ExportCommand(args: Array(args.dropFirst())).run()
+            return
+        }
+
         if primary == "uninstall" {
             UninstallCommand().run()
             return
@@ -220,18 +225,20 @@ struct Airtraffic {
     }
 
     /// Sum bytes across all processes belonging to the same app.
+    /// Groups by bundle ID when available so two apps that both have a process called
+    /// "Helper" don't incorrectly merge into one row.
     static func aggregateByApp(
         _ rows: [(name: String, pid: Int32, bytesIn: UInt64, bytesOut: UInt64)],
         resolver: AppNameResolver
     ) -> [(name: String, bytesIn: UInt64, bytesOut: UInt64)] {
-        var sum: [String: (bytesIn: UInt64, bytesOut: UInt64)] = [:]
+        var sum: [String: (displayName: String, bytesIn: UInt64, bytesOut: UInt64)] = [:]
         for row in rows {
-            let appName = resolver.appName(forPID: row.pid, fallbackProcessName: row.name)
-            if shouldIgnoreAppFromUsageTables(appName) { continue }
-            let existing = sum[appName] ?? (0, 0)
-            sum[appName] = (existing.0 + row.bytesIn, existing.1 + row.bytesOut)
+            let resolved = resolver.resolve(forPID: row.pid, fallbackProcessName: row.name)
+            if shouldIgnoreAppFromUsageTables(resolved.displayName) { continue }
+            let existing = sum[resolved.groupKey] ?? (resolved.displayName, 0, 0)
+            sum[resolved.groupKey] = (existing.0, existing.1 + row.bytesIn, existing.2 + row.bytesOut)
         }
-        return sum.map { (name: $0.key, bytesIn: $0.value.0, bytesOut: $0.value.1) }
+        return sum.map { (name: $0.value.displayName, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
     }
 
     /// Filter noisy system discovery traffic that is not useful in user-facing usage tables.
@@ -677,6 +684,48 @@ struct SinceCommand {
     }
 }
 
+/// `airtraffic export [today|month|since]` – dump usage as CSV to stdout.
+struct ExportCommand {
+    let args: [String]
+
+    func run() {
+        let period = args.first ?? "today"
+        guard let state = AirtrafficState.load() else {
+            print("No data yet. Is the daemon running? Try: airtraffic daemon")
+            return
+        }
+
+        let data: [String: AppUsage]
+        let label: String
+        switch period {
+        case "month":
+            data = state.monthByApp
+            label = "month"
+        case "since":
+            data = state.sinceByApp
+            label = "since"
+        default:
+            data = state.todayByApp
+            label = "today"
+        }
+
+        guard !data.isEmpty else {
+            print("No data recorded for \(label) yet.")
+            return
+        }
+
+        let rows = data
+            .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
+            .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+
+        print("App,Bytes In,Bytes Out,Total Bytes")
+        for row in rows {
+            let name = row.name.replacingOccurrences(of: ",", with: ";")
+            print("\(name),\(row.bytesIn),\(row.bytesOut),\(row.bytesIn + row.bytesOut)")
+        }
+    }
+}
+
 /// `airtraffic uninstall` – remove login item and delete all data.
 struct UninstallCommand {
     func run() {
@@ -782,26 +831,54 @@ struct NettopParser {
     }
 }
 
-/// Resolves PID to app display name via NSRunningApplication; caches results.
+/// Resolves PID to app display name and group key via NSRunningApplication; caches results.
 final class AppNameResolver {
-    private var cache: [Int32: String] = [:]
+    private struct Resolved {
+        let displayName: String
+        /// Bundle ID when available; falls back to displayName. Used as the aggregation key
+        /// so two different apps that both expose a process called "Helper" stay separate.
+        let groupKey: String
+    }
+
+    private var cache: [Int32: Resolved] = [:]
     private let lock = NSLock()
 
+    func resolve(forPID pid: Int32, fallbackProcessName: String) -> (displayName: String, groupKey: String) {
+        let r = _resolve(forPID: pid, fallbackProcessName: fallbackProcessName)
+        return (r.displayName, r.groupKey)
+    }
+
+    /// Convenience wrapper kept for any remaining call sites.
     func appName(forPID pid: Int32, fallbackProcessName: String) -> String {
-        guard pid > 0 else { return friendlyName(stripPID(from: fallbackProcessName)) }
+        _resolve(forPID: pid, fallbackProcessName: fallbackProcessName).displayName
+    }
+
+    private func _resolve(forPID pid: Int32, fallbackProcessName: String) -> Resolved {
+        guard pid > 0 else {
+            let name = friendlyName(stripPID(from: fallbackProcessName))
+            return Resolved(displayName: name, groupKey: name)
+        }
         lock.lock()
         defer { lock.unlock() }
         if let cached = cache[pid] { return cached }
         let raw: String
+        let bundleID: String?
         if let app = NSRunningApplication(processIdentifier: pid) {
             raw = app.localizedName ?? app.executableURL?.lastPathComponent ?? stripPID(from: fallbackProcessName)
+            bundleID = app.bundleIdentifier
         } else {
             // nettop truncates process names to 16 chars; use proc_pidpath for the full executable name.
             raw = executableName(forPID: pid) ?? stripPID(from: fallbackProcessName)
+            bundleID = nil
         }
-        let name = friendlyName(raw)
-        cache[pid] = name
-        return name
+        let displayName = friendlyName(raw)
+        // Use displayName as the group key so that a main app (which has a bundle ID) and
+        // its helper processes (which don't) both resolve to the same key via friendlyName.
+        // e.g. "ChatGPT" (bundle: com.openai.chat) and "ChatGPTHelper" (no bundle) both → "ChatGPT".
+        let groupKey = displayName
+        let resolved = Resolved(displayName: displayName, groupKey: groupKey)
+        cache[pid] = resolved
+        return resolved
     }
 
     /// Returns the last path component of the executable for a given PID via proc_pidpath.
