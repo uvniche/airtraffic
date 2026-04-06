@@ -63,6 +63,12 @@ swift run airtraffic month
 swift run airtraffic since 01:01:2026 00:00
 ```
 
+**export** – export per-app usage as CSV (period: `today`, `month`, or `since`):
+
+```bash
+swift run airtraffic export today
+```
+
 ## License
 
 MIT
