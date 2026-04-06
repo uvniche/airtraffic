@@ -145,6 +145,12 @@ struct SinceCommand {
 struct ExportCommand {
     let args: [String]
 
+    /// ~/airtraffic/ — all CSV exports land here.
+    static var exportDir: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("airtraffic", isDirectory: true)
+    }
+
     func run() {
         let period = args.first ?? "today"
         guard let state = AirtrafficState.load() else {
@@ -175,10 +181,30 @@ struct ExportCommand {
             .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
             .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
 
-        print("App,Bytes In,Bytes Out,Total Bytes")
+        var csv = "App,Bytes In,Bytes Out,Total Bytes\n"
         for row in rows {
             let name = row.name.replacingOccurrences(of: ",", with: ";")
-            print("\(name),\(row.bytesIn),\(row.bytesOut),\(row.bytesIn + row.bytesOut)")
+            csv += "\(name),\(row.bytesIn),\(row.bytesOut),\(row.bytesIn + row.bytesOut)\n"
+        }
+
+        let dir = Self.exportDir
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            print("Could not create export folder: \(error)")
+            return
+        }
+
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let filename = "airtraffic-\(label)-\(timestamp).csv"
+        let fileURL = dir.appendingPathComponent(filename)
+
+        do {
+            try csv.write(to: fileURL, atomically: true, encoding: .utf8)
+            print("Exported to \(fileURL.path)")
+        } catch {
+            print("Failed to write CSV: \(error)")
         }
     }
 }
