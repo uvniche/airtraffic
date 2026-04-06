@@ -64,6 +64,20 @@ struct AirtrafficState: Codable {
             try? data.write(to: url, options: .atomic)
         }
     }
+
+    /// Reload only the fields that CLI commands can mutate while the daemon is running.
+    /// Call this at the top of each collector tick so that `limit`, `since`, etc. are
+    /// never silently overwritten by the daemon's stale in-memory copy.
+    mutating func reloadMutableConfig() {
+        guard let fresh = Self.load() else { return }
+        limits = fresh.limits
+        totalLimit = fresh.totalLimit
+        notifiedLimits = fresh.notifiedLimits
+        if fresh.sinceStart != sinceStart {
+            sinceStart = fresh.sinceStart
+            sinceByApp = fresh.sinceByApp
+        }
+    }
 }
 
 struct AppUsage: Codable {
