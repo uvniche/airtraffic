@@ -788,18 +788,51 @@ final class AppNameResolver {
     private let lock = NSLock()
 
     func appName(forPID pid: Int32, fallbackProcessName: String) -> String {
-        guard pid > 0 else { return stripPID(from: fallbackProcessName) }
+        guard pid > 0 else { return friendlyName(stripPID(from: fallbackProcessName)) }
         lock.lock()
         defer { lock.unlock() }
         if let cached = cache[pid] { return cached }
-        let name: String
+        let raw: String
         if let app = NSRunningApplication(processIdentifier: pid) {
-            name = app.localizedName ?? app.executableURL?.lastPathComponent ?? stripPID(from: fallbackProcessName)
+            raw = app.localizedName ?? app.executableURL?.lastPathComponent ?? stripPID(from: fallbackProcessName)
         } else {
-            name = stripPID(from: fallbackProcessName)
+            // nettop truncates process names to 16 chars; use proc_pidpath for the full executable name.
+            raw = executableName(forPID: pid) ?? stripPID(from: fallbackProcessName)
         }
+        let name = friendlyName(raw)
         cache[pid] = name
         return name
+    }
+
+    /// Returns the last path component of the executable for a given PID via proc_pidpath.
+    private func executableName(forPID pid: Int32) -> String? {
+        var buf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        let ret = proc_pidpath(pid, &buf, UInt32(buf.count))
+        guard ret > 0 else { return nil }
+        let path = String(cString: buf)
+        return URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    /// Maps raw resolved names and daemon executable names to clean, user-facing labels.
+    private func friendlyName(_ raw: String) -> String {
+        let lower = raw.lowercased()
+
+        // iCloud sync daemons — group them all under one label
+        if lower == "bird" || lower == "cloudd" || lower == "nsurlsessiond"
+            || lower == "com.apple.bird" || lower.hasPrefix("bird.") {
+            return "iCloud Sync"
+        }
+
+        // Strip Electron/Chromium/plugin helper suffixes so e.g.:
+        //   "Cursor Helper (Renderer)", "Cursor Helper (Plugin): extension-host",
+        //   "Google Chrome Helper", "ChatGPTHelper"
+        // all collapse to just the app name.
+        if let helperRange = raw.range(of: "\\s*Helper.*", options: [.regularExpression, .caseInsensitive]) {
+            let base = String(raw[..<helperRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+            if !base.isEmpty { return base }
+        }
+
+        return raw
     }
 
     private func stripPID(from processName: String) -> String {
