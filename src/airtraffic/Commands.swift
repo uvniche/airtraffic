@@ -1,0 +1,326 @@
+import Foundation
+
+// MARK: - Byte helpers
+
+/// Parses human-readable byte strings like "500MB", "2GB", "1.5 GB" into bytes.
+func parseBytes(_ s: String) -> UInt64? {
+    let cleaned = s.trimmingCharacters(in: .whitespaces).uppercased()
+        .replacingOccurrences(of: " ", with: "")
+    let units: [(suffix: String, multiplier: UInt64)] = [
+        ("GB", 1_000_000_000),
+        ("MB", 1_000_000),
+        ("KB", 1_000),
+        ("B",  1),
+    ]
+    for (suffix, multiplier) in units {
+        if cleaned.hasSuffix(suffix) {
+            let numStr = String(cleaned.dropLast(suffix.count))
+            if let value = Double(numStr), value > 0 {
+                return UInt64(value * Double(multiplier))
+            }
+        }
+    }
+    return nil
+}
+
+func formatBytesLimit(_ bytes: UInt64) -> String {
+    if bytes >= 1_000_000_000 {
+        return String(format: "%.2f GB", Double(bytes) / 1_000_000_000)
+    } else if bytes >= 1_000_000 {
+        return String(format: "%.2f MB", Double(bytes) / 1_000_000)
+    } else if bytes >= 1_000 {
+        return String(format: "%.2f KB", Double(bytes) / 1_000)
+    }
+    return "\(bytes) B"
+}
+
+// MARK: - airtraffic status
+
+struct StatusCommand {
+    func run() {
+        guard let state = AirtrafficState.load() else {
+            print("Daemon: not running (no state found).")
+            return
+        }
+        let now = Date()
+        let active = now.timeIntervalSince(state.lastUpdate) < 10
+
+        print("Daemon: \(active ? "running" : "not running")")
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        print("Running since: \(formatter.string(from: state.collectorStart))")
+    }
+}
+
+// MARK: - airtraffic today
+
+struct TodayCommand {
+    func run() async {
+        await Airtraffic.runLiveCumulative {
+            guard let state = AirtrafficState.load() else { return nil }
+            let now = Date()
+            guard Calendar.current.isDate(now, inSameDayAs: state.todayStart) else { return nil }
+            guard !state.todayByApp.isEmpty else { return nil }
+            let apps = state.todayByApp
+                .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
+                .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+            return ("Per-app usage since midnight (cumulative):", apps)
+        }
+    }
+}
+
+// MARK: - airtraffic month
+
+struct MonthCommand {
+    func run() async {
+        await Airtraffic.runLiveCumulative {
+            guard let state = AirtrafficState.load(),
+                  let monthStart = state.monthStart else { return nil }
+            guard !state.monthByApp.isEmpty else { return nil }
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .short
+            let apps = state.monthByApp
+                .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
+                .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+            return ("Per-app usage since \(formatter.string(from: monthStart)) (cumulative):", apps)
+        }
+    }
+}
+
+// MARK: - airtraffic since dd:MM:yyyy HH:mm
+
+struct SinceCommand {
+    let args: [String]
+
+    func run() async {
+        guard !args.isEmpty else {
+            print("Usage: airtraffic since dd:MM:yyyy HH:mm")
+            return
+        }
+
+        let dateString = args.joined(separator: " ")
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "dd:MM:yyyy HH:mm"
+
+        guard let sinceDate = formatter.date(from: dateString) else {
+            print("Could not parse date/time '\(dateString)'. Expected format: dd:MM:yyyy HH:mm")
+            return
+        }
+
+        var state = AirtrafficState.load() ?? AirtrafficState.empty(now: Date())
+        let isNewWindow = state.sinceStart != sinceDate
+        if isNewWindow {
+            state.sinceStart = sinceDate
+            state.sinceByApp = [:]
+            state.persist()
+        }
+
+        let now = Date()
+        if now <= sinceDate {
+            print("Since-period starts in the future (\(formatter.string(from: sinceDate))). No data yet.")
+            return
+        }
+
+        let displayFormatter = DateFormatter()
+        displayFormatter.dateStyle = .medium
+        displayFormatter.timeStyle = .short
+
+        await Airtraffic.runLiveCumulative {
+            guard let s = AirtrafficState.load() else { return nil }
+            guard !s.sinceByApp.isEmpty else { return nil }
+            let apps = s.sinceByApp
+                .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
+                .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+            return ("Per-app usage since \(displayFormatter.string(from: sinceDate)) (cumulative):", apps)
+        }
+    }
+}
+
+// MARK: - airtraffic export [today|month|since]
+
+struct ExportCommand {
+    let args: [String]
+
+    func run() {
+        let period = args.first ?? "today"
+        guard let state = AirtrafficState.load() else {
+            print("No data yet. Is the daemon running? Try: airtraffic daemon")
+            return
+        }
+
+        let data: [String: AppUsage]
+        let label: String
+        switch period {
+        case "month":
+            data = state.monthByApp
+            label = "month"
+        case "since":
+            data = state.sinceByApp
+            label = "since"
+        default:
+            data = state.todayByApp
+            label = "today"
+        }
+
+        guard !data.isEmpty else {
+            print("No data recorded for \(label) yet.")
+            return
+        }
+
+        let rows = data
+            .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
+            .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+
+        print("App,Bytes In,Bytes Out,Total Bytes")
+        for row in rows {
+            let name = row.name.replacingOccurrences(of: ",", with: ";")
+            print("\(name),\(row.bytesIn),\(row.bytesOut),\(row.bytesIn + row.bytesOut)")
+        }
+    }
+}
+
+// MARK: - airtraffic limit / limits
+
+struct LimitCommand {
+    let args: [String]
+
+    func run() {
+        guard !args.isEmpty else {
+            printUsage()
+            return
+        }
+
+        var state = AirtrafficState.load() ?? AirtrafficState.empty(now: Date())
+
+        // limit clear <app|--total|bare-size>
+        if args.first == "clear" {
+            let rest = Array(args.dropFirst())
+            let target = rest.joined(separator: " ")
+            if target == "--total" || (rest.count == 1 && parseBytes(rest[0]) != nil) {
+                state.totalLimit = nil
+                state.notifiedLimits.remove("__total__")
+                state.persist()
+                print("Overall daily limit cleared.")
+            } else if target.isEmpty {
+                printUsage()
+            } else {
+                state.limits.removeValue(forKey: target)
+                state.notifiedLimits.remove(target)
+                state.persist()
+                print("Limit cleared for \(target).")
+            }
+            return
+        }
+
+        // limit --total <threshold>
+        if args.first == "--total" {
+            guard args.count >= 2, let bytes = parseBytes(args[1]) else {
+                print("Usage: airtraffic limit --total <threshold>  (e.g. 2GB, 500MB)")
+                return
+            }
+            state.totalLimit = bytes
+            state.notifiedLimits.remove("__total__")
+            state.persist()
+            print("Overall daily limit set to \(formatBytesLimit(bytes)).")
+            return
+        }
+
+        // limit <threshold> — single bare size treated as overall limit
+        if args.count == 1, let bytes = parseBytes(args[0]) {
+            state.totalLimit = bytes
+            state.notifiedLimits.remove("__total__")
+            state.persist()
+            print("Overall daily limit set to \(formatBytesLimit(bytes)).")
+            return
+        }
+
+        // limit <app> <threshold>
+        guard args.count >= 2 else { printUsage(); return }
+        let threshold = args.last!
+        let appName = args.dropLast().joined(separator: " ")
+        guard let bytes = parseBytes(threshold) else {
+            print("Could not parse '\(threshold)'. Use e.g. 500MB or 2GB.")
+            return
+        }
+        state.limits[appName] = bytes
+        state.notifiedLimits.remove(appName)
+        state.persist()
+        print("Daily limit for \(appName) set to \(formatBytesLimit(bytes)).")
+    }
+
+    private func printUsage() {
+        print("""
+        Usage:
+          airtraffic limit <app> <threshold>      e.g. airtraffic limit "Google Chrome" 500MB
+          airtraffic limit --total <threshold>    e.g. airtraffic limit --total 2GB
+          airtraffic limit clear <app>            remove a per-app limit
+          airtraffic limit clear --total          remove the overall limit
+        """)
+    }
+}
+
+struct LimitsCommand {
+    func run() {
+        guard let state = AirtrafficState.load() else {
+            print("No data yet. Is the daemon running? Try: airtraffic daemon")
+            return
+        }
+
+        let hasPerApp = !state.limits.isEmpty
+        let hasTotal = state.totalLimit != nil
+
+        guard hasPerApp || hasTotal else {
+            print("No limits set. Try: airtraffic limit \"App\" 500MB")
+            return
+        }
+
+        if hasTotal {
+            let cap = state.totalLimit!
+            let used = state.todayByApp.values.reduce(UInt64(0)) { $0 + $1.bytesIn + $1.bytesOut }
+            let pct = min(100, Int(Double(used) / Double(cap) * 100))
+            let status = used >= cap ? " ⚠ EXCEEDED" : ""
+            print("Overall:  \(formatBytesLimit(used)) / \(formatBytesLimit(cap))  (\(pct)%)\(status)")
+        }
+
+        if hasPerApp {
+            if hasTotal { print("") }
+            let sorted = state.limits.sorted { $0.key < $1.key }
+            for (app, cap) in sorted {
+                let usage = state.todayByApp[app]
+                let used = (usage?.bytesIn ?? 0) + (usage?.bytesOut ?? 0)
+                let pct = min(100, Int(Double(used) / Double(cap) * 100))
+                let status = used >= cap ? " ⚠ EXCEEDED" : ""
+                let appCol = app.padding(toLength: 28, withPad: " ", startingAt: 0)
+                print("\(appCol)  \(formatBytesLimit(used)) / \(formatBytesLimit(cap))  (\(pct)%)\(status)")
+            }
+        }
+    }
+}
+
+// MARK: - airtraffic uninstall
+
+struct UninstallCommand {
+    func run() {
+        let fm = FileManager.default
+        let plistURL = LoginItemInstaller.plistURL
+
+        Airtraffic.launchctlBootout()
+        Airtraffic.killExistingDaemons()
+        if fm.fileExists(atPath: plistURL.path) {
+            try? fm.removeItem(at: plistURL)
+        }
+
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support", isDirectory: true)
+        let dataDir = base.appendingPathComponent("airtraffic", isDirectory: true)
+        if fm.fileExists(atPath: dataDir.path) {
+            try? fm.removeItem(at: dataDir)
+        }
+
+        print("Uninstalled. Login item removed and all data deleted.")
+    }
+}
