@@ -181,10 +181,10 @@ struct ExportCommand {
             .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
             .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
 
-        var csv = "App,Bytes In,Bytes Out,Total Bytes\n"
+        var csv = "App,Down,Up,Total\n"
         for row in rows {
             let name = row.name.replacingOccurrences(of: ",", with: ";")
-            csv += "\(name),\(row.bytesIn),\(row.bytesOut),\(row.bytesIn + row.bytesOut)\n"
+            csv += "\(name),\(formatBytesLimit(row.bytesIn)),\(formatBytesLimit(row.bytesOut)),\(formatBytesLimit(row.bytesIn + row.bytesOut))\n"
         }
 
         let dir = Self.exportDir
