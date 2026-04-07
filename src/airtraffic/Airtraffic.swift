@@ -101,7 +101,7 @@ struct Airtraffic {
         }
 
         // Enter alternate screen buffer — like top/htop, keeps main scrollback clean
-        ttyWrite(tty, "\u{1B}[?1049h")
+        ttyWrite(tty, "\u{1B}[?1049h\u{1B}[2J\u{1B}[H")
         // Raw mode: suppress echo so scroll/key events don't print garbage on screen
         rawModeInputFD = STDIN_FILENO
         let savedTermios = enableRawMode(tty: FileHandle.standardInput)
@@ -117,13 +117,11 @@ struct Airtraffic {
         signal(SIGINT, sigHandler)
 
         while true {
-            if let key = readKeyNonBlocking() {
-                if key == "n" || key == "N" {
+            if let key = readNavigationKeyNonBlocking() {
+                if key == .nextPage {
                     currentPage += 1
-                } else if key == "p" || key == "P" {
+                } else if key == .previousPage {
                     currentPage = max(0, currentPage - 1)
-                } else if key == "q" || key == "Q" {
-                    sigHandler(SIGINT)
                 }
             }
 
@@ -154,7 +152,7 @@ struct Airtraffic {
                 let end = min(start + pageSize, deltas.count)
                 let display = start < end ? Array(deltas[start..<end]) : []
 
-                var out = "\u{1B}[H\u{1B}[J"
+                var out = "\u{1B}[2J\u{1B}[H"
                 out += "AirTraffic - Live\n\n"
                 out += headerLines().joined(separator: "\n") + "\n"
                 for row in display {
@@ -162,7 +160,7 @@ struct Airtraffic {
                 }
                 out += "\n"
                 out += "Page \(currentPage + 1)/\(totalPages)\n"
-                out += "Controls: n=next page, p=previous page, q=quit (or Ctrl+C)"
+                out += "Controls: →=next page, ←=previous page, Ctrl+C=quit"
                 ttyWrite(tty, out)
             } catch {
                 ttyWrite(tty, "Error: \(error)\n")
@@ -475,7 +473,7 @@ extension Airtraffic {
         var lastSnapshot: [String: (bytesIn: UInt64, bytesOut: UInt64)] = [:]
         var currentPage = 0
 
-        ttyWrite(tty, "\u{1B}[?1049h")
+        ttyWrite(tty, "\u{1B}[?1049h\u{1B}[2J\u{1B}[H")
         rawModeInputFD = STDIN_FILENO
         let savedTermios = enableRawMode(tty: FileHandle.standardInput)
         let sigHandler: @convention(c) (Int32) -> Void = { _ in
@@ -489,25 +487,23 @@ extension Airtraffic {
         signal(SIGINT, sigHandler)
 
         while true {
-            if let key = readKeyNonBlocking() {
-                if key == "n" || key == "N" {
+            if let key = readNavigationKeyNonBlocking() {
+                if key == .nextPage {
                     currentPage += 1
-                } else if key == "p" || key == "P" {
+                } else if key == .previousPage {
                     currentPage = max(0, currentPage - 1)
-                } else if key == "q" || key == "Q" {
-                    sigHandler(SIGINT)
                 }
             }
 
             guard let state = AirtrafficState.load() else {
-                ttyWrite(tty, "\u{1B}[H\u{1B}[JWaiting for data…\n\nCtrl+C to quit")
+                ttyWrite(tty, "\u{1B}[2J\u{1B}[HWaiting for data…\n\nCtrl+C to quit")
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 continue
             }
 
             let now = Date()
             guard Calendar.current.isDate(now, inSameDayAs: state.todayStart), !state.todayByApp.isEmpty else {
-                ttyWrite(tty, "\u{1B}[H\u{1B}[JNo data recorded for today yet.\n\nCtrl+C to quit")
+                ttyWrite(tty, "\u{1B}[2J\u{1B}[HNo data recorded for today yet.\n\nCtrl+C to quit")
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 continue
             }
@@ -534,7 +530,7 @@ extension Airtraffic {
             let end = min(start + pageSize, ranked.count)
             let pageRows = start < end ? Array(ranked[start..<end]) : []
 
-            var out = "\u{1B}[H\u{1B}[J"
+            var out = "\u{1B}[2J\u{1B}[H"
             out += "AirTraffic - Today\n\n"
             out += fit("Rank", width: 5) + " "
             out += fit("App", width: colName - 6) + " "
@@ -562,22 +558,41 @@ extension Airtraffic {
             out += fit(formatBytes(totalIn + totalOut), width: colTotal) + "\n"
             out += "\n"
             out += "Page \(currentPage + 1)/\(totalPages)\n"
-            out += "Controls: n=next page, p=previous page, q=quit (or Ctrl+C)"
+            out += "Controls: →=next page, ←=previous page, Ctrl+C=quit"
             ttyWrite(tty, out)
 
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
     }
 
-    static func readKeyNonBlocking() -> Character? {
+    enum NavigationKey {
+        case nextPage
+        case previousPage
+    }
+
+    static func readNavigationKeyNonBlocking() -> NavigationKey? {
         var pfd = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)
         let ready = Darwin.poll(&pfd, 1, 0)
-        guard ready > 0, (pfd.revents & Int16(POLLIN)) != 0 else { return nil }
+        guard ready > 0, (pfd.revents & Int16(POLLIN)) != 0 else {
+            return nil
+        }
 
         var byte: UInt8 = 0
         let bytesRead = Darwin.read(STDIN_FILENO, &byte, 1)
         guard bytesRead == 1 else { return nil }
-        return Character(UnicodeScalar(byte))
+
+        // Arrow keys arrive as ANSI escape sequences:
+        // Left: ESC [ D, Right: ESC [ C
+        if byte == 0x1B {
+            var sequence = [UInt8](repeating: 0, count: 2)
+            let seqRead = Darwin.read(STDIN_FILENO, &sequence, 2)
+            guard seqRead == 2, sequence[0] == 0x5B else { return nil }
+            if sequence[1] == 0x44 { return .previousPage } // Left
+            if sequence[1] == 0x43 { return .nextPage }     // Right
+            return nil
+        }
+
+        return nil
     }
 
     static func cumulativeHeaderLines() -> [String] {
@@ -608,7 +623,7 @@ extension Airtraffic {
         let tty = openTTY()
         var currentPage = 0
 
-        ttyWrite(tty, "\u{1B}[?1049h")
+        ttyWrite(tty, "\u{1B}[?1049h\u{1B}[2J\u{1B}[H")
         rawModeInputFD = STDIN_FILENO
         let savedTermios = enableRawMode(tty: FileHandle.standardInput)
         let sigHandler: @convention(c) (Int32) -> Void = { _ in
@@ -622,13 +637,11 @@ extension Airtraffic {
         signal(SIGINT, sigHandler)
 
         while true {
-            if let key = readKeyNonBlocking() {
-                if key == "n" || key == "N" {
+            if let key = readNavigationKeyNonBlocking() {
+                if key == .nextPage {
                     currentPage += 1
-                } else if key == "p" || key == "P" {
+                } else if key == .previousPage {
                     currentPage = max(0, currentPage - 1)
-                } else if key == "q" || key == "Q" {
-                    sigHandler(SIGINT)
                 }
             }
 
@@ -638,7 +651,7 @@ extension Airtraffic {
                 let start = currentPage * pageSize
                 let end = min(start + pageSize, apps.count)
                 let display = start < end ? Array(apps[start..<end]) : []
-                var out = "\u{1B}[H\u{1B}[J"
+                var out = "\u{1B}[2J\u{1B}[H"
                 out += title + "\n"
                 out += "\n"
                 for line in cumulativeHeaderLines() { out += line + "\n" }
@@ -647,10 +660,10 @@ extension Airtraffic {
                 }
                 out += "\n"
                 out += "Page \(currentPage + 1)/\(totalPages)\n"
-                out += "Controls: n=next page, p=previous page, q=quit (or Ctrl+C)"
+                out += "Controls: →=next page, ←=previous page, Ctrl+C=quit"
                 ttyWrite(tty, out)
             } else {
-                ttyWrite(tty, "\u{1B}[H\u{1B}[JWaiting for data…\n\nCtrl+C to quit")
+                ttyWrite(tty, "\u{1B}[2J\u{1B}[HWaiting for data…\n\nCtrl+C to quit")
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
