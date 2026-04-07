@@ -171,6 +171,13 @@ struct Airtraffic {
 
     /// Fires a macOS local notification. Requests permission on first call.
     static func sendLimitNotification(title: String, body: String) {
+        // `swift run` executables from `.build/...` can crash when touching
+        // UNUserNotificationCenter (no app bundle proxy). Use AppleScript there.
+        if shouldUseAppleScriptNotifications() {
+            sendAppleScriptNotification(title: title, body: body)
+            return
+        }
+
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }
@@ -185,6 +192,30 @@ struct Airtraffic {
             )
             center.add(request)
         }
+    }
+
+    static func shouldUseAppleScriptNotifications() -> Bool {
+        let bundleURLPath = Bundle.main.bundleURL.path
+        return bundleURLPath.contains("/.build/")
+    }
+
+    static func sendAppleScriptNotification(title: String, body: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = [
+            "-e",
+            "display notification \(appleScriptQuoted(body)) with title \(appleScriptQuoted(title)) sound name \"default\""
+        ]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
+    }
+
+    static func appleScriptQuoted(_ s: String) -> String {
+        let escaped = s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     /// Background collector: periodically samples nettop and persists per-app usage.
