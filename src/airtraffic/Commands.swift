@@ -58,16 +58,7 @@ struct StatusCommand {
 
 struct TodayCommand {
     func run() async {
-        await Airtraffic.runLiveCumulative {
-            guard let state = AirtrafficState.load() else { return nil }
-            let now = Date()
-            guard Calendar.current.isDate(now, inSameDayAs: state.todayStart) else { return nil }
-            guard !state.todayByApp.isEmpty else { return nil }
-            let apps = state.todayByApp
-                .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
-                .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
-            return ("Per-app usage since midnight (cumulative):", apps)
-        }
+        await Airtraffic.runTodayLive()
     }
 }
 

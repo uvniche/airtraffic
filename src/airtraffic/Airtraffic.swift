@@ -75,7 +75,8 @@ struct Airtraffic {
         let nettop = NettopParser()
         let appResolver = AppNameResolver()
         let tty = openTTY()
-        let topN = 20
+        let pageSize = 10
+        var currentPage = 0
 
         if once {
             do {
@@ -86,7 +87,7 @@ struct Airtraffic {
                 }
                 let byApp = aggregateByApp(rows, resolver: appResolver)
                 let deltas = byApp.sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
-                for row in deltas.prefix(topN) {
+                for row in deltas.prefix(pageSize) {
                     ttyWrite(tty, rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval) + "\n")
                 }
             } catch {
@@ -111,6 +112,16 @@ struct Airtraffic {
         signal(SIGINT, sigHandler)
 
         while true {
+            if let key = readKeyNonBlocking(tty: tty) {
+                if key == "n" || key == "N" {
+                    currentPage += 1
+                } else if key == "p" || key == "P" {
+                    currentPage = max(0, currentPage - 1)
+                } else if key == "q" || key == "Q" {
+                    sigHandler(SIGINT)
+                }
+            }
+
             do {
                 let rows = try nettop.sample()
                 guard !rows.isEmpty else {
@@ -130,8 +141,11 @@ struct Airtraffic {
                 lastSnapshot = Dictionary(uniqueKeysWithValues: byApp.map { ($0.name, ($0.bytesIn, $0.bytesOut)) })
                 deltas.sort { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
 
-                let nonZero = deltas.filter { $0.bytesIn > 0 || $0.bytesOut > 0 }
-                let display = nonZero.isEmpty ? Array(deltas.prefix(topN)) : Array(nonZero.prefix(topN))
+                let totalPages = max(1, Int(ceil(Double(deltas.count) / Double(pageSize))))
+                currentPage = min(currentPage, totalPages - 1)
+                let start = currentPage * pageSize
+                let end = min(start + pageSize, deltas.count)
+                let display = start < end ? Array(deltas[start..<end]) : []
 
                 var out = "\u{1B}[H\u{1B}[J"
                 out += "AirTraffic – live per-app network usage\n"
@@ -141,7 +155,8 @@ struct Airtraffic {
                     out += rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval) + "\n"
                 }
                 out += "\n"
-                out += "Ctrl+C to quit"
+                out += "Page \(currentPage + 1)/\(totalPages)  •  Showing \(start + 1)-\(max(start + display.count, start)) of \(deltas.count)\n"
+                out += "Controls: n=next page, p=previous page, q=quit (or Ctrl+C)"
                 ttyWrite(tty, out)
             } catch {
                 ttyWrite(tty, "Error: \(error)\n")
@@ -444,6 +459,127 @@ struct Airtraffic {
 // MARK: - Shared live-table helpers for cumulative views
 
 extension Airtraffic {
+    static func runTodayLive() async {
+        let interval: TimeInterval = 1.0
+        let pageSize = 10
+        let tty = openTTY()
+        let nettop = NettopParser()
+        let resolver = AppNameResolver()
+        var lastSnapshot: [String: (bytesIn: UInt64, bytesOut: UInt64)] = [:]
+        var currentPage = 0
+
+        ttyWrite(tty, "\u{1B}[?1049h")
+        let savedTermios = enableRawMode(tty: tty)
+        let sigHandler: @convention(c) (Int32) -> Void = { _ in
+            let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
+            var s = rawModeSaved
+            tcsetattr(restoreTTY.fileDescriptor, TCSAFLUSH, &s)
+            if let d = "\u{1B}[?1049l".data(using: .utf8) { restoreTTY.write(d) }
+            exit(0)
+        }
+        rawModeSaved = savedTermios
+        signal(SIGINT, sigHandler)
+
+        while true {
+            if let key = readKeyNonBlocking(tty: tty) {
+                if key == "n" || key == "N" {
+                    currentPage += 1
+                } else if key == "p" || key == "P" {
+                    currentPage = max(0, currentPage - 1)
+                } else if key == "q" || key == "Q" {
+                    sigHandler(SIGINT)
+                }
+            }
+
+            guard let state = AirtrafficState.load() else {
+                ttyWrite(tty, "\u{1B}[H\u{1B}[JWaiting for data…\n\nCtrl+C to quit")
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                continue
+            }
+
+            let now = Date()
+            guard Calendar.current.isDate(now, inSameDayAs: state.todayStart), !state.todayByApp.isEmpty else {
+                ttyWrite(tty, "\u{1B}[H\u{1B}[JNo data recorded for today yet.\n\nCtrl+C to quit")
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                continue
+            }
+
+            var rateByApp: [String: (bytesIn: UInt64, bytesOut: UInt64)] = [:]
+            if let rows = try? nettop.sample(), !rows.isEmpty {
+                let byApp = aggregateByApp(rows, resolver: resolver)
+                for row in byApp {
+                    let (prevIn, prevOut) = lastSnapshot[row.name] ?? (0, 0)
+                    let dIn = row.bytesIn >= prevIn ? row.bytesIn - prevIn : row.bytesIn
+                    let dOut = row.bytesOut >= prevOut ? row.bytesOut - prevOut : row.bytesOut
+                    rateByApp[row.name] = (dIn, dOut)
+                }
+                lastSnapshot = Dictionary(uniqueKeysWithValues: byApp.map { ($0.name, ($0.bytesIn, $0.bytesOut)) })
+            }
+
+            let ranked = state.todayByApp
+                .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
+                .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+
+            let totalPages = max(1, Int(ceil(Double(ranked.count) / Double(pageSize))))
+            currentPage = min(currentPage, totalPages - 1)
+            let start = currentPage * pageSize
+            let end = min(start + pageSize, ranked.count)
+            let pageRows = start < end ? Array(ranked[start..<end]) : []
+
+            var out = "\u{1B}[H\u{1B}[J"
+            out += "Per-app usage since midnight (cumulative + live rates)\n\n"
+            out += fit("Rank", width: 5) + " "
+            out += fit("App", width: colName - 6) + " "
+            out += fit("↓ Down", width: colDown) + " "
+            out += fit("↑ Up", width: colUp) + " "
+            out += fit("Total", width: colTotal) + " "
+            out += fit("↓ Now/s", width: colDown) + " "
+            out += fit("↑ Now/s", width: colUp) + " "
+            out += fit("Now/s", width: colTotal) + "\n"
+            out += String(repeating: "─", count: 5 + 1 + (colName - 6) + 1 + colDown + 1 + colUp + 1 + colTotal + 1 + colDown + 1 + colUp + 1 + colTotal) + "\n"
+
+            for (idx, row) in pageRows.enumerated() {
+                let rank = start + idx + 1
+                let rate = rateByApp[row.name] ?? (0, 0)
+                let nowTotal = rate.bytesIn + rate.bytesOut
+                out += fit("\(rank)", width: 5) + " "
+                out += fit(row.name, width: colName - 6) + " "
+                out += fit(formatBytes(row.bytesIn), width: colDown) + " "
+                out += fit(formatBytes(row.bytesOut), width: colUp) + " "
+                out += fit(formatBytes(row.bytesIn + row.bytesOut), width: colTotal) + " "
+                out += fit(formatRate(Double(rate.bytesIn) / interval), width: colDown) + " "
+                out += fit(formatRate(Double(rate.bytesOut) / interval), width: colUp) + " "
+                out += fit(formatRate(Double(nowTotal) / interval), width: colTotal) + "\n"
+            }
+
+            let totalIn = ranked.reduce(UInt64(0)) { $0 + $1.bytesIn }
+            let totalOut = ranked.reduce(UInt64(0)) { $0 + $1.bytesOut }
+            out += String(repeating: "─", count: 5 + 1 + (colName - 6) + 1 + colDown + 1 + colUp + 1 + colTotal + 1 + colDown + 1 + colUp + 1 + colTotal) + "\n"
+            out += fit("", width: 5) + " "
+            out += fit("TOTAL", width: colName - 6) + " "
+            out += fit(formatBytes(totalIn), width: colDown) + " "
+            out += fit(formatBytes(totalOut), width: colUp) + " "
+            out += fit(formatBytes(totalIn + totalOut), width: colTotal) + "\n"
+            out += "\n"
+            out += "Page \(currentPage + 1)/\(totalPages)  •  Showing \(start + 1)-\(max(start + pageRows.count, start)) of \(ranked.count)\n"
+            out += "Controls: n=next page, p=previous page, q=quit (or Ctrl+C)"
+            ttyWrite(tty, out)
+
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+    }
+
+    static func readKeyNonBlocking(tty: FileHandle) -> Character? {
+        var pfd = pollfd(fd: Int32(tty.fileDescriptor), events: Int16(POLLIN), revents: 0)
+        let ready = Darwin.poll(&pfd, 1, 0)
+        guard ready > 0, (pfd.revents & Int16(POLLIN)) != 0 else { return nil }
+
+        var byte: UInt8 = 0
+        let bytesRead = Darwin.read(tty.fileDescriptor, &byte, 1)
+        guard bytesRead == 1 else { return nil }
+        return Character(UnicodeScalar(byte))
+    }
+
     static func cumulativeHeaderLines() -> [String] {
         let app  = fit("App",   width: colName)
         let down = fit("↓ Down", width: colDown)
@@ -468,8 +604,9 @@ extension Airtraffic {
         dataProvider: () -> (title: String, apps: [(name: String, bytesIn: UInt64, bytesOut: UInt64)])?
     ) async {
         let interval: TimeInterval = 2.0
-        let topN = 30
+        let pageSize = 10
         let tty = openTTY()
+        var currentPage = 0
 
         ttyWrite(tty, "\u{1B}[?1049h")
         let savedTermios = enableRawMode(tty: tty)
@@ -484,8 +621,22 @@ extension Airtraffic {
         signal(SIGINT, sigHandler)
 
         while true {
+            if let key = readKeyNonBlocking(tty: tty) {
+                if key == "n" || key == "N" {
+                    currentPage += 1
+                } else if key == "p" || key == "P" {
+                    currentPage = max(0, currentPage - 1)
+                } else if key == "q" || key == "Q" {
+                    sigHandler(SIGINT)
+                }
+            }
+
             if let (title, apps) = dataProvider() {
-                let display = Array(apps.prefix(topN))
+                let totalPages = max(1, Int(ceil(Double(apps.count) / Double(pageSize))))
+                currentPage = min(currentPage, totalPages - 1)
+                let start = currentPage * pageSize
+                let end = min(start + pageSize, apps.count)
+                let display = start < end ? Array(apps[start..<end]) : []
                 var out = "\u{1B}[H\u{1B}[J"
                 out += title + "\n"
                 out += "\n"
@@ -494,7 +645,8 @@ extension Airtraffic {
                     out += cumulativeRowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut) + "\n"
                 }
                 out += "\n"
-                out += "Ctrl+C to quit"
+                out += "Page \(currentPage + 1)/\(totalPages)  •  Showing \(start + 1)-\(max(start + display.count, start)) of \(apps.count)\n"
+                out += "Controls: n=next page, p=previous page, q=quit (or Ctrl+C)"
                 ttyWrite(tty, out)
             } else {
                 ttyWrite(tty, "\u{1B}[H\u{1B}[JWaiting for data…\n\nCtrl+C to quit")
