@@ -5,7 +5,7 @@ macOS CLI Network App
 ## Requirements
 
 - **macOS 13+** (Ventura or later)
-- **Xcode 15+**
+- **Xcode Command Line Tools** (or Xcode). Install with: `xcode-select --install`
 
 ## Build & Run
 
