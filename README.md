@@ -5,8 +5,7 @@ macOS CLI Network App
 ## Requirements
 
 - **macOS 13+** (Ventura or later)
-- **Xcode Command Line Tools** (or Xcode). Install with: `xcode-select --install`
-- **terminal-notifier**. Install with: `brew install terminal-notifier`
+- **Xcode 15+**
 
 ## Build & Run
 
