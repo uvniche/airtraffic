@@ -241,6 +241,7 @@ struct LimitCommand {
             }
             state.totalLimit = bytes
             state.notifiedLimits.remove("__total__")
+            maybeNotifyImmediatelyForTotalLimit(&state)
             state.persist()
             print("Overall daily limit set to \(formatBytesLimit(bytes)).")
             return
@@ -250,6 +251,7 @@ struct LimitCommand {
         if args.count == 1, let bytes = parseBytes(args[0]) {
             state.totalLimit = bytes
             state.notifiedLimits.remove("__total__")
+            maybeNotifyImmediatelyForTotalLimit(&state)
             state.persist()
             print("Overall daily limit set to \(formatBytesLimit(bytes)).")
             return
@@ -265,8 +267,31 @@ struct LimitCommand {
         }
         state.limits[appName] = bytes
         state.notifiedLimits.remove(appName)
+        maybeNotifyImmediatelyForPerAppLimit(&state, appName: appName, cap: bytes)
         state.persist()
         print("Daily limit for \(appName) set to \(formatBytesLimit(bytes)).")
+    }
+
+    private func maybeNotifyImmediatelyForTotalLimit(_ state: inout AirtrafficState) {
+        guard let cap = state.totalLimit else { return }
+        let used = state.todayByApp.values.reduce(UInt64(0)) { $0 + $1.bytesIn + $1.bytesOut }
+        guard used >= cap else { return }
+        Airtraffic.sendLimitNotification(
+            title: "Daily data limit reached",
+            body: "Total usage today is \(formatBytesLimit(used)) (limit: \(formatBytesLimit(cap)))."
+        )
+        state.notifiedLimits.insert("__total__")
+    }
+
+    private func maybeNotifyImmediatelyForPerAppLimit(_ state: inout AirtrafficState, appName: String, cap: UInt64) {
+        let usage = state.todayByApp[appName]
+        let used = (usage?.bytesIn ?? 0) + (usage?.bytesOut ?? 0)
+        guard used >= cap else { return }
+        Airtraffic.sendLimitNotification(
+            title: "\(appName) data limit reached",
+            body: "\(appName) has used \(formatBytesLimit(used)) today (limit: \(formatBytesLimit(cap)))."
+        )
+        state.notifiedLimits.insert(appName)
     }
 
     private func printUsage() {
@@ -291,7 +316,7 @@ struct LimitsCommand {
         let hasTotal = state.totalLimit != nil
 
         guard hasPerApp || hasTotal else {
-            print("No limits set. Try: airtraffic limit \"App\" 500MB")
+            print("No limits set.")
             return
         }
 
