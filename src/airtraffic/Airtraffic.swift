@@ -86,7 +86,9 @@ struct Airtraffic {
                     return
                 }
                 let byApp = aggregateByApp(rows, resolver: appResolver)
-                let deltas = byApp.sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+                let deltas = byApp
+                    .filter { ($0.bytesIn + $0.bytesOut) > 0 }
+                    .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
                 for row in deltas.prefix(pageSize) {
                     ttyWrite(tty, rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval) + "\n")
                 }
@@ -139,7 +141,9 @@ struct Airtraffic {
                 }
 
                 lastSnapshot = Dictionary(uniqueKeysWithValues: byApp.map { ($0.name, ($0.bytesIn, $0.bytesOut)) })
-                deltas.sort { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+                deltas = deltas
+                    .filter { ($0.bytesIn + $0.bytesOut) > 0 }
+                    .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
 
                 let totalPages = max(1, Int(ceil(Double(deltas.count) / Double(pageSize))))
                 currentPage = min(currentPage, totalPages - 1)
@@ -155,7 +159,7 @@ struct Airtraffic {
                     out += rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval) + "\n"
                 }
                 out += "\n"
-                out += "Page \(currentPage + 1)/\(totalPages)  •  Showing \(start + 1)-\(max(start + display.count, start)) of \(deltas.count)\n"
+                out += "Page \(currentPage + 1)/\(totalPages)\n"
                 out += "Controls: n=next page, p=previous page, q=quit (or Ctrl+C)"
                 ttyWrite(tty, out)
             } catch {
@@ -527,41 +531,33 @@ extension Airtraffic {
             let pageRows = start < end ? Array(ranked[start..<end]) : []
 
             var out = "\u{1B}[H\u{1B}[J"
-            out += "Per-app usage since midnight (cumulative + live rates)\n\n"
+            out += "Per-app usage since midnight (updates live)\n\n"
             out += fit("Rank", width: 5) + " "
             out += fit("App", width: colName - 6) + " "
             out += fit("↓ Down", width: colDown) + " "
             out += fit("↑ Up", width: colUp) + " "
-            out += fit("Total", width: colTotal) + " "
-            out += fit("↓ Now/s", width: colDown) + " "
-            out += fit("↑ Now/s", width: colUp) + " "
-            out += fit("Now/s", width: colTotal) + "\n"
-            out += String(repeating: "─", count: 5 + 1 + (colName - 6) + 1 + colDown + 1 + colUp + 1 + colTotal + 1 + colDown + 1 + colUp + 1 + colTotal) + "\n"
+            out += fit("Total", width: colTotal) + "\n"
+            out += String(repeating: "─", count: 5 + 1 + (colName - 6) + 1 + colDown + 1 + colUp + 1 + colTotal) + "\n"
 
             for (idx, row) in pageRows.enumerated() {
                 let rank = start + idx + 1
-                let rate = rateByApp[row.name] ?? (0, 0)
-                let nowTotal = rate.bytesIn + rate.bytesOut
                 out += fit("\(rank)", width: 5) + " "
                 out += fit(row.name, width: colName - 6) + " "
                 out += fit(formatBytes(row.bytesIn), width: colDown) + " "
                 out += fit(formatBytes(row.bytesOut), width: colUp) + " "
-                out += fit(formatBytes(row.bytesIn + row.bytesOut), width: colTotal) + " "
-                out += fit(formatRate(Double(rate.bytesIn) / interval), width: colDown) + " "
-                out += fit(formatRate(Double(rate.bytesOut) / interval), width: colUp) + " "
-                out += fit(formatRate(Double(nowTotal) / interval), width: colTotal) + "\n"
+                out += fit(formatBytes(row.bytesIn + row.bytesOut), width: colTotal) + "\n"
             }
 
             let totalIn = ranked.reduce(UInt64(0)) { $0 + $1.bytesIn }
             let totalOut = ranked.reduce(UInt64(0)) { $0 + $1.bytesOut }
-            out += String(repeating: "─", count: 5 + 1 + (colName - 6) + 1 + colDown + 1 + colUp + 1 + colTotal + 1 + colDown + 1 + colUp + 1 + colTotal) + "\n"
+            out += String(repeating: "─", count: 5 + 1 + (colName - 6) + 1 + colDown + 1 + colUp + 1 + colTotal) + "\n"
             out += fit("", width: 5) + " "
             out += fit("TOTAL", width: colName - 6) + " "
             out += fit(formatBytes(totalIn), width: colDown) + " "
             out += fit(formatBytes(totalOut), width: colUp) + " "
             out += fit(formatBytes(totalIn + totalOut), width: colTotal) + "\n"
             out += "\n"
-            out += "Page \(currentPage + 1)/\(totalPages)  •  Showing \(start + 1)-\(max(start + pageRows.count, start)) of \(ranked.count)\n"
+            out += "Page \(currentPage + 1)/\(totalPages)\n"
             out += "Controls: n=next page, p=previous page, q=quit (or Ctrl+C)"
             ttyWrite(tty, out)
 
@@ -645,7 +641,7 @@ extension Airtraffic {
                     out += cumulativeRowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut) + "\n"
                 }
                 out += "\n"
-                out += "Page \(currentPage + 1)/\(totalPages)  •  Showing \(start + 1)-\(max(start + display.count, start)) of \(apps.count)\n"
+                out += "Page \(currentPage + 1)/\(totalPages)\n"
                 out += "Controls: n=next page, p=previous page, q=quit (or Ctrl+C)"
                 ttyWrite(tty, out)
             } else {
