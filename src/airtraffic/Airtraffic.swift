@@ -171,6 +171,13 @@ struct Airtraffic {
 
     /// Fires a macOS local notification. Requests permission on first call.
     static func sendLimitNotification(title: String, body: String) {
+        // `swift run` executables from `.build/...` can crash when touching
+        // UNUserNotificationCenter (no app bundle proxy). Use terminal-notifier there.
+        if shouldUseTerminalNotifierNotifications() {
+            _ = sendTerminalNotifierNotification(title: title, body: body)
+            return
+        }
+
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }
@@ -185,6 +192,55 @@ struct Airtraffic {
             )
             center.add(request)
         }
+    }
+
+    static func shouldUseTerminalNotifierNotifications() -> Bool {
+        let bundleURLPath = Bundle.main.bundleURL.path
+        return bundleURLPath.contains("/.build/")
+    }
+
+    @discardableResult
+    static func sendTerminalNotifierNotification(title: String, body: String) -> Bool {
+        guard let terminalNotifierPath = terminalNotifierPath() else { return false }
+
+        // Allow override for custom Cursor build IDs.
+        let envSender = ProcessInfo.processInfo.environment["AIRTRAFFIC_NOTIFICATION_SENDER"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let senders = [envSender, "com.todesktop.230313mzl4w4u92", "com.cursor.Cursor"]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+
+        for sender in senders {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: terminalNotifierPath)
+            p.arguments = [
+                "-title", title,
+                "-message", body,
+                "-sound", "default",
+                "-sender", sender
+            ]
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            do {
+                try p.run()
+                p.waitUntilExit()
+                if p.terminationStatus == 0 { return true }
+            } catch {
+                return false
+            }
+        }
+
+        return false
+    }
+
+    static func terminalNotifierPath() -> String? {
+        let paths = [
+            "/opt/homebrew/bin/terminal-notifier",
+            "/usr/local/bin/terminal-notifier",
+        ]
+        for path in paths where FileManager.default.isExecutableFile(atPath: path) {
+            return path
+        }
+        return nil
     }
 
     /// Background collector: periodically samples nettop and persists per-app usage.
