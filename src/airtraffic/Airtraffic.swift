@@ -3,6 +3,8 @@ import Darwin
 import AppKit
 import UserNotifications
 
+private var rawModeInputFD: Int32 = STDIN_FILENO
+
 @main
 struct Airtraffic {
     static func main() async {
@@ -101,12 +103,13 @@ struct Airtraffic {
         // Enter alternate screen buffer — like top/htop, keeps main scrollback clean
         ttyWrite(tty, "\u{1B}[?1049h")
         // Raw mode: suppress echo so scroll/key events don't print garbage on screen
-        let savedTermios = enableRawMode(tty: tty)
+        rawModeInputFD = STDIN_FILENO
+        let savedTermios = enableRawMode(tty: FileHandle.standardInput)
         // Restore on Ctrl+C
         let sigHandler: @convention(c) (Int32) -> Void = { _ in
-            let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
             var s = rawModeSaved
-            tcsetattr(restoreTTY.fileDescriptor, TCSAFLUSH, &s)
+            tcsetattr(rawModeInputFD, TCSAFLUSH, &s)
+            let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
             if let d = "\u{1B}[?1049l".data(using: .utf8) { restoreTTY.write(d) }
             exit(0)
         }
@@ -114,7 +117,7 @@ struct Airtraffic {
         signal(SIGINT, sigHandler)
 
         while true {
-            if let key = readKeyNonBlocking(tty: tty) {
+            if let key = readKeyNonBlocking() {
                 if key == "n" || key == "N" {
                     currentPage += 1
                 } else if key == "p" || key == "P" {
@@ -152,8 +155,7 @@ struct Airtraffic {
                 let display = start < end ? Array(deltas[start..<end]) : []
 
                 var out = "\u{1B}[H\u{1B}[J"
-                out += "AirTraffic – live per-app network usage\n"
-                out += "\n"
+                out += "AirTraffic - Live\n\n"
                 out += headerLines().joined(separator: "\n") + "\n"
                 for row in display {
                     out += rowLine(name: row.name, bytesIn: row.bytesIn, bytesOut: row.bytesOut, interval: interval) + "\n"
@@ -378,6 +380,7 @@ struct Airtraffic {
 
     /// Open /dev/tty for direct terminal output, bypassing any pipes from swift run.
     static func openTTY() -> FileHandle {
+        if let tty = FileHandle(forUpdatingAtPath: "/dev/tty") { return tty }
         if let tty = FileHandle(forWritingAtPath: "/dev/tty") { return tty }
         return FileHandle.standardOutput
     }
@@ -473,11 +476,12 @@ extension Airtraffic {
         var currentPage = 0
 
         ttyWrite(tty, "\u{1B}[?1049h")
-        let savedTermios = enableRawMode(tty: tty)
+        rawModeInputFD = STDIN_FILENO
+        let savedTermios = enableRawMode(tty: FileHandle.standardInput)
         let sigHandler: @convention(c) (Int32) -> Void = { _ in
-            let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
             var s = rawModeSaved
-            tcsetattr(restoreTTY.fileDescriptor, TCSAFLUSH, &s)
+            tcsetattr(rawModeInputFD, TCSAFLUSH, &s)
+            let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
             if let d = "\u{1B}[?1049l".data(using: .utf8) { restoreTTY.write(d) }
             exit(0)
         }
@@ -485,7 +489,7 @@ extension Airtraffic {
         signal(SIGINT, sigHandler)
 
         while true {
-            if let key = readKeyNonBlocking(tty: tty) {
+            if let key = readKeyNonBlocking() {
                 if key == "n" || key == "N" {
                     currentPage += 1
                 } else if key == "p" || key == "P" {
@@ -531,7 +535,7 @@ extension Airtraffic {
             let pageRows = start < end ? Array(ranked[start..<end]) : []
 
             var out = "\u{1B}[H\u{1B}[J"
-            out += "Per-app usage since midnight (updates live)\n\n"
+            out += "AirTraffic - Today\n\n"
             out += fit("Rank", width: 5) + " "
             out += fit("App", width: colName - 6) + " "
             out += fit("↓ Down", width: colDown) + " "
@@ -565,13 +569,13 @@ extension Airtraffic {
         }
     }
 
-    static func readKeyNonBlocking(tty: FileHandle) -> Character? {
-        var pfd = pollfd(fd: Int32(tty.fileDescriptor), events: Int16(POLLIN), revents: 0)
+    static func readKeyNonBlocking() -> Character? {
+        var pfd = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)
         let ready = Darwin.poll(&pfd, 1, 0)
         guard ready > 0, (pfd.revents & Int16(POLLIN)) != 0 else { return nil }
 
         var byte: UInt8 = 0
-        let bytesRead = Darwin.read(tty.fileDescriptor, &byte, 1)
+        let bytesRead = Darwin.read(STDIN_FILENO, &byte, 1)
         guard bytesRead == 1 else { return nil }
         return Character(UnicodeScalar(byte))
     }
@@ -605,11 +609,12 @@ extension Airtraffic {
         var currentPage = 0
 
         ttyWrite(tty, "\u{1B}[?1049h")
-        let savedTermios = enableRawMode(tty: tty)
+        rawModeInputFD = STDIN_FILENO
+        let savedTermios = enableRawMode(tty: FileHandle.standardInput)
         let sigHandler: @convention(c) (Int32) -> Void = { _ in
-            let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
             var s = rawModeSaved
-            tcsetattr(restoreTTY.fileDescriptor, TCSAFLUSH, &s)
+            tcsetattr(rawModeInputFD, TCSAFLUSH, &s)
+            let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
             if let d = "\u{1B}[?1049l".data(using: .utf8) { restoreTTY.write(d) }
             exit(0)
         }
@@ -617,7 +622,7 @@ extension Airtraffic {
         signal(SIGINT, sigHandler)
 
         while true {
-            if let key = readKeyNonBlocking(tty: tty) {
+            if let key = readKeyNonBlocking() {
                 if key == "n" || key == "N" {
                     currentPage += 1
                 } else if key == "p" || key == "P" {

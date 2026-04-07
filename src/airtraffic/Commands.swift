@@ -76,7 +76,7 @@ struct MonthCommand {
             let apps = state.monthByApp
                 .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
                 .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
-            return ("Per-app usage since \(formatter.string(from: monthStart)) (updates live):", apps)
+            return ("AirTraffic - Month (since \(formatter.string(from: monthStart)))", apps)
         }
     }
 }
@@ -126,7 +126,7 @@ struct SinceCommand {
             let apps = s.sinceByApp
                 .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
                 .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
-            return ("Per-app usage since \(displayFormatter.string(from: sinceDate)) (updates live):", apps)
+            return ("AirTraffic - Since \(displayFormatter.string(from: sinceDate))", apps)
         }
     }
 }
