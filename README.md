@@ -7,7 +7,7 @@ macOS CLI Network App
 - **macOS 13+** (Ventura or later)
 - **Xcode Command Line Tools** (or Xcode). Install with: `xcode-select --install`
 
-## Build & Run
+## Build
 
 From the project directory:
 
@@ -15,81 +15,49 @@ From the project directory:
 swift build
 ```
 
+## Run
+
+```bash
+swift run airtraffic
+```
+
+Then use commands inside the interactive prompt:
+
+```text
+airtraffic> command
+```
+
 ## Commands
 
-### Daemon
+`help` – list commands grouped by category (`General`, `Usage`, and `Limits`).
 
-**daemon** – start the daemon and install a login item so it runs at login:
+### General
 
-```bash
-swift run airtraffic daemon
-```
+`status` – show how long the app has been running.
 
-**status** – show how long the daemon has been running:
-
-```bash
-swift run airtraffic status
-```
-
-**uninstall** – remove the login item and delete all stored data:
-
-```bash
-swift run airtraffic uninstall
-```
+`uninstall` – remove the login item, app, and delete all stored data.
 
 ### Usage
 
-**live** – live per-app view, refresh every second:
+`live` – live per-app view, refresh every second.
 
-```bash
-swift run airtraffic live
-```
+`today` – per-app usage since 12:00 AM today.
 
-**today** – per-app usage since 12:00 AM today:
+`month` – per-app usage since 12:00 AM on the first day of the current month.
 
-```bash
-swift run airtraffic today
-```
+`since <dd:MM:yyyy HH:mm>` – per-app usage since a specific date & time.
 
-**month** – per-app usage since 12:00 AM on the first day of the current month:
-
-```bash
-swift run airtraffic month
-```
-
-**since** – per-app usage since a specific date & time (format: `dd:MM:yyyy HH:mm`):
-
-```bash
-swift run airtraffic since 01:01:2026 00:00
-```
-
-**export** – export per-app usage as a CSV file (period: `today`, `month`, or `since`):
-
-```bash
-swift run airtraffic export today
-```
+`export <today|month|since>` – export per-app usage as a CSV file.
 
 ### Limits
 
-**limit** – set a daily data cap (overall or per-app). Sends a macOS notification when exceeded:
+`limit <threshold>` – set an overall daily data cap. Sends a macOS notification when exceeded.
 
-```bash
-swift run airtraffic limit 2GB
-swift run airtraffic limit "Google Chrome" 500MB
-```
+`limit <app> <threshold>` – set a daily per-app data cap.
 
-**limits** – show all active limits with current usage vs cap:
+`limits` – show all active limits with current usage vs cap.
 
-```bash
-swift run airtraffic limits
-```
-
-**limit clear** – remove a limit:
-
-```bash
-swift run airtraffic limit clear 2GB
-swift run airtraffic limit clear "Google Chrome"
-```
+`limit clear <app|threshold>` – remove a limit.
 
 ## License
 
