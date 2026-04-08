@@ -78,7 +78,6 @@ struct HelpCommand {
     private func printRoot() {
         print("""
         AirTraffic
-        macOS CLI Network App
 
         Use: help <category>
 
@@ -91,7 +90,6 @@ struct HelpCommand {
     private func printUsage() {
         print("""
         AirTraffic
-        macOS CLI Network App
 
         Usage:
           status - Show how long the app has been running
@@ -106,7 +104,6 @@ struct HelpCommand {
     private func printLimits() {
         print("""
         AirTraffic
-        macOS CLI Network App
 
         Limits:
           limit <app> <threshold> - Set a daily per-app data cap. Sends a macOS notification when exceeded
