@@ -421,6 +421,6 @@ struct UninstallCommand {
             try? fm.removeItem(at: dataDir)
         }
 
-        print("Uninstalled. Login item removed and all data deleted.")
+        print("Uninstalled.")
     }
 }
