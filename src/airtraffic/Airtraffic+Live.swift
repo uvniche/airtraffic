@@ -50,6 +50,10 @@ extension Airtraffic {
         rawModeSaved = savedTermios
         signal(SIGINT, sigHandler)
 
+        let liveClockFormatter = DateFormatter()
+        liveClockFormatter.locale = Locale(identifier: "en_US_POSIX")
+        liveClockFormatter.dateFormat = "dd:MM:yyyy HH:mm:ss"
+
         while true {
             if let key = readNavigationKeyNonBlocking() {
                 if key == .nextPage {
@@ -65,6 +69,11 @@ extension Airtraffic {
             do {
                 let rows = try nettop.sample()
                 guard !rows.isEmpty else {
+                    let stamp = liveClockFormatter.string(from: Date())
+                    let waiting = terminalResetPrefix()
+                        + "AirTraffic - Live (\(stamp))\n\n"
+                        + "No network data available from nettop.\n\nEsc - Back"
+                    ttyWrite(tty, waiting)
                     try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                     continue
                 }
@@ -88,8 +97,9 @@ extension Airtraffic {
                 let end = min(start + pageSize, deltas.count)
                 let display = start < end ? Array(deltas[start..<end]) : []
 
+                let stamp = liveClockFormatter.string(from: Date())
                 var out = terminalResetPrefix()
-                out += "AirTraffic - Live\n\n"
+                out += "AirTraffic - Live (\(stamp))\n\n"
                 out += fit("No.", width: 4) + " "
                 out += fit("App", width: colName - 5) + " "
                 out += fit("↓ Down/s", width: colDown) + " "
