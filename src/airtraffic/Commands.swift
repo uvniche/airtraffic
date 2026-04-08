@@ -39,18 +39,94 @@ func formatBytesLimit(_ bytes: UInt64) -> String {
 struct StatusCommand {
     func run() {
         guard let state = AirtrafficState.load() else {
-            print("Daemon: not running (no state found).")
+            print("App: not running (no state found).")
             return
         }
         let now = Date()
         let active = now.timeIntervalSince(state.lastUpdate) < 10
 
-        print("Daemon: \(active ? "running" : "not running")")
+        print("App: \(active ? "running" : "not running")")
 
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .medium
         print("Running since: \(formatter.string(from: state.collectorStart))")
+    }
+}
+
+// MARK: - airtraffic help
+
+struct HelpCommand {
+    let args: [String]
+
+    func run() {
+        let topic = args.first?.lowercased()
+        switch topic {
+        case nil:
+            printRoot()
+        case "general", "daemon":
+            printDaemon()
+        case "usage":
+            printUsage()
+        case "limits":
+            printLimits()
+        default:
+            print("Unknown category: \(topic!)")
+            print("")
+            printRoot()
+        }
+    }
+
+    private func printRoot() {
+        print("""
+        AirTraffic
+        macOS CLI Network App
+
+        Use: help <category>
+
+        Categories:
+          general
+          usage
+          limits
+        """)
+    }
+
+    private func printDaemon() {
+        print("""
+        AirTraffic
+        macOS CLI Network App
+
+        General:
+          status - Show how long the app has been running
+          uninstall - Remove login item and delete all stored data
+        """)
+    }
+
+    private func printUsage() {
+        print("""
+        AirTraffic
+        macOS CLI Network App
+
+        Usage:
+          live - Live per-app view, refresh every second
+          today - Per-app usage since 12:00 AM today
+          month - Per-app usage since 12:00 AM on the first day of the current month
+          since - Per-app usage since a specific date & time (format: dd:MM:yyyy HH:mm)
+          export - Export per-app usage as a CSV file (period: today, month, or since)
+        """)
+    }
+
+    private func printLimits() {
+        print("""
+        AirTraffic
+        macOS CLI Network App
+
+        Limits:
+          limit <app> <threshold> - Set a daily per-app data cap. Sends a macOS notification when exceeded
+          limit <threshold> - Set an overall daily data cap (default when app is omitted)
+          limits - Show all active limits with current usage vs cap
+          limit clear - Remove a limit
+        """)
     }
 }
 
@@ -68,15 +144,15 @@ struct MonthCommand {
     func run() async {
         await Airtraffic.runLiveCumulative {
             guard let state = AirtrafficState.load(),
-                  let monthStart = state.monthStart else { return nil }
+                  state.monthStart != nil else { return nil }
             guard !state.monthByApp.isEmpty else { return nil }
             let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .short
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "dd:MM:yyyy HH:mm"
             let apps = state.monthByApp
                 .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
                 .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
-            return ("AirTraffic - Month (since \(formatter.string(from: monthStart)))", apps)
+            return ("AirTraffic - Month (since \(formatter.string(from: state.collectorStart)))", apps)
         }
     }
 }
@@ -145,7 +221,7 @@ struct ExportCommand {
     func run() {
         let period = args.first ?? "today"
         guard let state = AirtrafficState.load() else {
-            print("No data yet. Is the daemon running? Try: airtraffic daemon")
+            print("No data yet. Is the app running? Run: swift run airtraffic")
             return
         }
 
@@ -213,11 +289,14 @@ struct LimitCommand {
 
         var state = AirtrafficState.load() ?? AirtrafficState.empty(now: Date())
 
-        // limit clear <app|--total|bare-size>
+        // limit clear <app|bare-size>
         if args.first == "clear" {
             let rest = Array(args.dropFirst())
             let target = rest.joined(separator: " ")
-            if target == "--total" || (rest.count == 1 && parseBytes(rest[0]) != nil) {
+            if target == "--total" {
+                print("`--total` is no longer supported. Use: airtraffic limit clear <threshold>")
+                return
+            } else if rest.count == 1 && parseBytes(rest[0]) != nil {
                 state.totalLimit = nil
                 state.notifiedLimits.remove("__total__")
                 state.persist()
@@ -233,17 +312,8 @@ struct LimitCommand {
             return
         }
 
-        // limit --total <threshold>
         if args.first == "--total" {
-            guard args.count >= 2, let bytes = parseBytes(args[1]) else {
-                print("Usage: airtraffic limit --total <threshold>  (e.g. 2GB, 500MB)")
-                return
-            }
-            state.totalLimit = bytes
-            state.notifiedLimits.remove("__total__")
-            maybeNotifyImmediatelyForTotalLimit(&state)
-            state.persist()
-            print("Overall daily limit set to \(formatBytesLimit(bytes)).")
+            print("`--total` is no longer supported. Use: airtraffic limit <threshold>")
             return
         }
 
@@ -298,9 +368,9 @@ struct LimitCommand {
         print("""
         Usage:
           airtraffic limit <app> <threshold>      e.g. airtraffic limit "Google Chrome" 500MB
-          airtraffic limit --total <threshold>    e.g. airtraffic limit --total 2GB
+          airtraffic limit <threshold>            e.g. airtraffic limit 2GB (treated as overall limit)
           airtraffic limit clear <app>            remove a per-app limit
-          airtraffic limit clear --total          remove the overall limit
+          airtraffic limit clear <threshold>      remove the overall limit
         """)
     }
 }
@@ -308,7 +378,7 @@ struct LimitCommand {
 struct LimitsCommand {
     func run() {
         guard let state = AirtrafficState.load() else {
-            print("No data yet. Is the daemon running? Try: airtraffic daemon")
+            print("No data yet. Is the app running? Run: swift run airtraffic")
             return
         }
 
