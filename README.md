@@ -1,6 +1,6 @@
 # AirTraffic
 
-macOS CLI Network App
+AirTraffic is a macOS CLI network app that tracks per-app (not per-process) data usage, keeps persistent today / month / since history, and supports built-in data limits.
 
 ## Requirements
 
