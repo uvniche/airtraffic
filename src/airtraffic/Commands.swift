@@ -64,8 +64,6 @@ struct HelpCommand {
         switch topic {
         case nil:
             printRoot()
-        case "general", "daemon":
-            printDaemon()
         case "usage":
             printUsage()
         case "limits":
@@ -85,20 +83,8 @@ struct HelpCommand {
         Use: help <category>
 
         Categories:
-          general
           usage
           limits
-        """)
-    }
-
-    private func printDaemon() {
-        print("""
-        AirTraffic
-        macOS CLI Network App
-
-        General:
-          status - Show how long the app has been running
-          uninstall - Remove login item and delete all stored data
         """)
     }
 
@@ -108,6 +94,7 @@ struct HelpCommand {
         macOS CLI Network App
 
         Usage:
+          status - Show how long the app has been running
           live - Live per-app view, refresh every second
           today - Per-app usage since 12:00 AM today
           month - Per-app usage since 12:00 AM on the first day of the current month
@@ -128,6 +115,7 @@ struct HelpCommand {
           limit clear - Remove a limit
         """)
     }
+
 }
 
 // MARK: - airtraffic today
