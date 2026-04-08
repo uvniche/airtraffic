@@ -29,15 +29,11 @@ airtraffic> command
 
 ## Commands
 
-`help` – list commands grouped by category (`General`, `Usage`, and `Limits`).
-
-### General
-
-`status` – show how long the app has been running.
-
-`uninstall` – remove the login item, app, and delete all stored data.
+`help` – list commands grouped by category (`Usage` and `Limits`).
 
 ### Usage
+
+`status` – show how long the app has been running.
 
 `live` – live per-app view, refresh every second.
 
@@ -58,6 +54,16 @@ airtraffic> command
 `limits` – show all active limits with current usage vs cap.
 
 `limit clear <app|threshold>` – remove a limit.
+
+## Uninstall
+
+From the project directory:
+
+```bash
+swift run airtraffic uninstall
+```
+
+Removes the login item, app, and all stored data.
 
 ## License
 
