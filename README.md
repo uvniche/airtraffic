@@ -63,7 +63,7 @@ From the project directory:
 swift run airtraffic uninstall
 ```
 
-Removes the login item, app, and all stored data.
+Removes the app and all stored data.
 
 ## License
 
