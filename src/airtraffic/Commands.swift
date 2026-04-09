@@ -92,7 +92,6 @@ struct HelpCommand {
         AirTraffic
 
         Usage:
-          home - Return to the startup home screen
           status - Show how long the app has been running
           live - Live per-app view, refresh every second
           today - Per-app usage since 12:00 AM today

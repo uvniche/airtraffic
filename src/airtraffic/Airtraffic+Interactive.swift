@@ -99,7 +99,7 @@ extension Airtraffic {
         print("AirTraffic")
         print("macOS CLI Network App")
         print("")
-        print("Type 'help' for commands, Ctrl+C to quit.")
+        print("Type 'help' for commands, 'home' to return here, Ctrl+C to quit.")
     }
 
     static func shellStyleSplit(_ input: String) -> [String] {
