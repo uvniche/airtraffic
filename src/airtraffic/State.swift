@@ -98,26 +98,26 @@ enum LoginItemInstaller {
     static func ensureInstalledIfNeeded() {
         let fm = FileManager.default
         let plistURL = Self.plistURL
+        let executableURL = Airtraffic.preferredCollectorExecutableURL()
+        var shouldRewrite = true
 
-        if fm.fileExists(atPath: plistURL.path) {
-            return
+        if fm.fileExists(atPath: plistURL.path),
+           let data = try? Data(contentsOf: plistURL),
+           let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+           let args = plist["ProgramArguments"] as? [String],
+           args.count >= 2,
+           args[0] == executableURL.path,
+           args[1] == "daemon" {
+            shouldRewrite = false
         }
+
+        if !shouldRewrite { return }
 
         do {
             try fm.createDirectory(at: plistURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-            let executableURL: URL = {
-                if let url = Bundle.main.executableURL {
-                    return url
-                }
-                let arg0 = CommandLine.arguments.first ?? "airtraffic"
-                if arg0.hasPrefix("/") {
-                    return URL(fileURLWithPath: arg0)
-                } else {
-                    let cwd = fm.currentDirectoryPath
-                    return URL(fileURLWithPath: arg0, relativeTo: URL(fileURLWithPath: cwd)).standardizedFileURL
-                }
-            }()
+            if fm.fileExists(atPath: plistURL.path) {
+                try? fm.removeItem(at: plistURL)
+            }
 
             let plist: [String: Any] = [
                 "Label": label,

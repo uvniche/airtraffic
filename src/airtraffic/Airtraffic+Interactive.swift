@@ -26,20 +26,17 @@ extension Airtraffic {
                 HelpCommand(args: tail).run()
                 continue
             }
+            if command == "home" {
+                renderInteractiveHome()
+                showHomeView = false
+                continue
+            }
 
             if command == "daemon" {
                 if tail.last != "--daemonized" {
-                    launchctlBootout()
-                    killExistingDaemons()
-                    let exe = CommandLine.arguments[0]
-                    let child = Process()
-                    child.executableURL = URL(fileURLWithPath: exe)
-                    child.arguments = ["daemon", "--daemonized"]
-                    child.standardInput = FileHandle.nullDevice
-                    child.standardOutput = FileHandle.nullDevice
-                    child.standardError = FileHandle.nullDevice
-                    try? child.run()
-                    print("App started. Running in the background.")
+                    let wasRunning = isCollectorProbablyRunning()
+                    startCollectorIfNeeded()
+                    print(wasRunning ? "App already running. Collector is up." : "App started. Running in the background.")
                     continue
                 }
                 await runCollector(interval: interval)
@@ -144,17 +141,6 @@ extension Airtraffic {
     }
 
     static func startBackgroundAppIfNeeded() {
-        if isCollectorProbablyRunning() { return }
-
-        // Start the collector only if it isn't already running. Avoid booting out / killing
-        // existing jobs here so repeated `swift run airtraffic` is safe/idempotent.
-        let exe = CommandLine.arguments[0]
-        let child = Process()
-        child.executableURL = URL(fileURLWithPath: exe)
-        child.arguments = ["daemon", "--daemonized"]
-        child.standardInput = FileHandle.nullDevice
-        child.standardOutput = FileHandle.nullDevice
-        child.standardError = FileHandle.nullDevice
-        try? child.run()
+        startCollectorIfNeeded()
     }
 }
