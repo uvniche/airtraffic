@@ -4,6 +4,166 @@ import AppKit
 import UserNotifications
 
 extension Airtraffic {
+    static func isCollectorProbablyRunning(activeStateThresholdSeconds: TimeInterval = 10) -> Bool {
+        if let state = AirtrafficState.load() {
+            let now = Date()
+            if now.timeIntervalSince(state.lastUpdate) < activeStateThresholdSeconds {
+                return true
+            }
+        }
+
+        guard let pid = runningCollectorPIDFromLaunchctl() else { return false }
+        // `kill(pid, 0)` doesn't actually signal; it checks for existence/permission.
+        return kill(pid, 0) == 0
+    }
+
+    static func ensureTerminalLauncherAppInstalledIfNeeded() {
+        // When running via `swift run`, cwd is usually the repo root.
+        // The launcher app embeds this path so clicking it can run `swift run airtraffic` in the right directory.
+        let repoDir = FileManager.default.currentDirectoryPath
+        guard FileManager.default.fileExists(atPath: repoDir) else { return }
+
+        let fm = FileManager.default
+        let appName = "AirTraffic"
+        let primaryAppURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+            .appendingPathComponent("\(appName).app", isDirectory: true)
+        let userAppsURL = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent("Applications", isDirectory: true)
+            .appendingPathComponent("\(appName).app", isDirectory: true)
+
+        // Prefer /Applications, fall back to ~/Applications.
+        let targetAppURL: URL = {
+            if fm.isWritableFile(atPath: "/Applications") { return primaryAppURL }
+            return userAppsURL
+        }()
+
+        // If already installed and points at this repo, do nothing.
+        let launcherScriptURL = targetAppURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("MacOS", isDirectory: true)
+            .appendingPathComponent(appName)
+        let launcherVersionMarker = "AIRTRAFFIC_LAUNCHER_V5"
+        if let existing = try? String(contentsOf: launcherScriptURL, encoding: .utf8),
+           existing.contains(launcherVersionMarker),
+           existing.contains("repo_dir=\"\(repoDir)\"") {
+            return
+        }
+
+        do {
+            // Remove any stale install so updates are clean.
+            if fm.fileExists(atPath: targetAppURL.path) {
+                try fm.removeItem(at: targetAppURL)
+            }
+
+            let contents = targetAppURL.appendingPathComponent("Contents", isDirectory: true)
+            let macosDir = contents.appendingPathComponent("MacOS", isDirectory: true)
+            let resourcesDir = contents.appendingPathComponent("Resources", isDirectory: true)
+            try fm.createDirectory(at: macosDir, withIntermediateDirectories: true)
+            try fm.createDirectory(at: resourcesDir, withIntermediateDirectories: true)
+
+            let infoPlist = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+              <key>CFBundleDevelopmentRegion</key>
+              <string>en</string>
+              <key>CFBundleDisplayName</key>
+              <string>\(appName)</string>
+              <key>CFBundleExecutable</key>
+              <string>\(appName)</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.uvniche.airtraffic.launcher</string>
+              <key>CFBundleInfoDictionaryVersion</key>
+              <string>6.0</string>
+              <key>CFBundleName</key>
+              <string>\(appName)</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>13.0</string>
+              <key>LSUIElement</key>
+              <true/>
+            </dict>
+            </plist>
+            """
+            try infoPlist.write(to: contents.appendingPathComponent("Info.plist"), atomically: true, encoding: .utf8)
+
+            let escapedRepo = repoDir
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            let launcher = """
+            #!/bin/zsh
+            # \(launcherVersionMarker)
+            set -euo pipefail
+
+            repo_dir="\(escapedRepo)"
+
+            if [[ ! -d "${repo_dir}" ]]; then
+              # No GUI dependency here; keep failure obvious.
+              echo "AirTraffic repo not found at: ${repo_dir}" 1>&2
+              exit 1
+            fi
+
+            # Avoid AppleScript Automation permissions by opening a .command script in Terminal.
+            # macOS will run `.command` files in Terminal without needing automation privileges.
+            tmp_dir="${TMPDIR:-/tmp}"
+            cmd_file="${tmp_dir%/}/airtraffic-launch.command"
+
+            cat > "${cmd_file}" <<CMD
+            #!/bin/zsh
+            set -euo pipefail
+            cd "\(escapedRepo)"
+            swift run airtraffic
+            CMD
+            chmod +x "${cmd_file}"
+
+            # `open` will use Terminal for `.command` scripts.
+            /usr/bin/open "${cmd_file}"
+            """
+            try launcher.write(to: launcherScriptURL, atomically: true, encoding: .utf8)
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcherScriptURL.path)
+        } catch {
+            // If we can't install/update the launcher, don't break the CLI.
+            return
+        }
+    }
+
+    private static func runningCollectorPIDFromLaunchctl() -> pid_t? {
+        let uid = getuid()
+        let context = "gui/\(uid)/\(LoginItemInstaller.label)"
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        proc.arguments = ["print", context]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = FileHandle.nullDevice
+        do {
+            try proc.run()
+        } catch {
+            return nil
+        }
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else { return nil }
+
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        // Example line: "pid = 12345"
+        for line in output.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("pid =") else { continue }
+            let parts = trimmed.split(separator: " ")
+            if let last = parts.last, let pid = Int32(last) {
+                return pid_t(pid)
+            }
+        }
+        return nil
+    }
+
     /// Fires a macOS local notification. Requests permission on first call.
     static func sendLimitNotification(title: String, body: String) {
         if shouldUseAppleScriptNotifications() {
