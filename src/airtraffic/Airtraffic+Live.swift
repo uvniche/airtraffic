@@ -145,12 +145,9 @@ extension Airtraffic {
         let interval: TimeInterval = 1.0
         let pageSize = 10
         let tty = openTTY()
-        let nettop = NettopParser()
-        let resolver = AppNameResolver()
         let displayFormatter = DateFormatter()
         displayFormatter.locale = Locale(identifier: "en_US_POSIX")
         displayFormatter.dateFormat = "dd:MM:yyyy HH:mm"
-        var lastSnapshot: [String: (bytesIn: UInt64, bytesOut: UInt64)] = [:]
         var currentPage = 0
 
         ttyWrite(tty, "\u{1B}[?1049h" + terminalResetPrefix())
@@ -189,14 +186,6 @@ extension Airtraffic {
                 ttyWrite(tty, terminalResetPrefix() + "No data recorded for today yet.\n\nEsc - Back")
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 continue
-            }
-
-            if let rows = try? nettop.sample(), !rows.isEmpty {
-                let byApp = aggregateByApp(rows, resolver: resolver)
-                for row in byApp {
-                    let _ = lastSnapshot[row.name] ?? (0, 0)
-                }
-                lastSnapshot = Dictionary(uniqueKeysWithValues: byApp.map { ($0.name, ($0.bytesIn, $0.bytesOut)) })
             }
 
             let ranked = state.todayByApp
