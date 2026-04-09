@@ -5,6 +5,9 @@ import UserNotifications
 
 extension Airtraffic {
     static func shouldOpenTerminalForBundledLaunch(args: [String]) -> Bool {
+        // Only open Terminal when the app is launched directly (no CLI subcommand).
+        // LaunchAgent runs use args like `daemon` and must stay headless.
+        if !args.isEmpty { return false }
         if args.contains("--terminal-ui") { return false }
         if args.contains("--daemonized") { return false }
         if isatty(STDIN_FILENO) != 0 { return false }
