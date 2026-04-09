@@ -30,13 +30,15 @@ Or with Xcode:
 
 ## Run
 
+From the project directory:
+
 ```bash
 swift run airtraffic
 ```
 
 You can also launch it from **Applications** via `AirTraffic.app` (opens Terminal and runs AirTraffic).
 
-Then use commands inside the interactive prompt:
+Run commands inside the prompt:
 
 ```text
 airtraffic> command

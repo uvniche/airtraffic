@@ -5,8 +5,6 @@ struct Airtraffic {
     static func main() async {
         let interval: TimeInterval = 1.0
         let args = Array(CommandLine.arguments.dropFirst())
-        let primary = args.first
-        let once = args.contains("--once") || primary == "once"
 
         if shouldOpenTerminalForBundledLaunch(args: args) {
             openTerminalForBundledLaunch()
@@ -19,68 +17,18 @@ struct Airtraffic {
             ensureBundledAppInstalledIfNeeded()
         }
 
-        // No command -> interactive shell mode.
-        if primary == nil {
-            await runInteractiveShell(interval: interval)
-            return
-        }
-
-        if primary == "daemon" {
-            if args.last != "--daemonized" {
-                let wasRunning = isCollectorProbablyRunning()
-                startCollectorIfNeeded()
-                print(wasRunning ? "App already running. Collector is up." : "App started. Running in the background.")
-                return
-            }
+        // Internal-only daemon collector path used by the background child process.
+        if args.first == "daemon", args.last == "--daemonized" {
             await runCollector(interval: interval)
             return
         }
 
-        if primary == "status" {
-            StatusCommand().run()
-            return
-        }
-
-        if primary == "help" || primary == "--help" || primary == "-h" {
-            HelpCommand(args: Array(args.dropFirst())).run()
-            return
-        }
-
-        if primary == "today" {
-            await TodayCommand().run()
-            return
-        }
-
-        if primary == "month" {
-            await MonthCommand().run()
-            return
-        }
-
-        if primary == "since" {
-            await SinceCommand(args: Array(args.dropFirst())).run()
-            return
-        }
-
-        if primary == "export" {
-            ExportCommand(args: Array(args.dropFirst())).run()
-            return
-        }
-
-        if primary == "limit" {
-            LimitCommand(args: Array(args.dropFirst())).run()
-            return
-        }
-
-        if primary == "limits" {
-            LimitsCommand().run()
-            return
-        }
-
-        if primary == "uninstall" {
+        // Only supported one-shot: uninstall (e.g. `swift run airtraffic uninstall`).
+        if args == ["uninstall"] {
             UninstallCommand().run()
             return
         }
 
-        await runLiveCommand(interval: interval, once: once)
+        await runInteractiveShell(interval: interval)
     }
 }

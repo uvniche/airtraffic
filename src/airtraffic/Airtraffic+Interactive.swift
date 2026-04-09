@@ -74,10 +74,6 @@ extension Airtraffic {
                 LimitsCommand().run()
                 continue
             }
-            if command == "uninstall" {
-                UninstallCommand().run()
-                continue
-            }
             if command == "live" || command == "once" {
                 let runOnce = command == "once" || tail.contains("--once")
                 await runLiveCommand(interval: interval, once: runOnce)

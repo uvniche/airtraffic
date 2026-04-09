@@ -2,14 +2,6 @@ import Foundation
 import AppKit
 
 struct NettopParser {
-    private let bytesInIndex: Int
-    private let bytesOutIndex: Int
-
-    init() {
-        self.bytesInIndex = 4
-        self.bytesOutIndex = 5
-    }
-
     /// Run nettop once and parse CSV into per-process rows (process name, pid, bytes in, bytes out).
     func sample() throws -> [(name: String, pid: Int32, bytesIn: UInt64, bytesOut: UInt64)] {
         let process = Process()
@@ -27,13 +19,15 @@ struct NettopParser {
         var rows: [(name: String, pid: Int32, bytesIn: UInt64, bytesOut: UInt64)] = []
         let lines = output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         guard lines.count >= 2 else { return [] }
+        let header = parseCSVLine(lines[0])
+        let indexes = inferColumnIndexes(from: header)
 
         for line in lines.dropFirst(1) {
             let parsed = parseCSVLine(line)
-            guard parsed.count > bytesOutIndex,
-                  let bytesIn = UInt64(parsed[bytesInIndex].trimmingCharacters(in: .whitespaces)),
-                  let bytesOut = UInt64(parsed[bytesOutIndex].trimmingCharacters(in: .whitespaces)) else { continue }
-            let name = parsed.count > 1 ? parsed[1].trimmingCharacters(in: .whitespaces) : "?"
+            guard parsed.count > indexes.bytesOutIndex,
+                  let bytesIn = UInt64(parsed[indexes.bytesInIndex].trimmingCharacters(in: .whitespaces)),
+                  let bytesOut = UInt64(parsed[indexes.bytesOutIndex].trimmingCharacters(in: .whitespaces)) else { continue }
+            let name = parsed.count > indexes.nameIndex ? parsed[indexes.nameIndex].trimmingCharacters(in: .whitespaces) : "?"
             if name.isEmpty || name == "interface" { continue }
             let pid = extractPID(from: name)
             rows.append((name: name, pid: pid, bytesIn: bytesIn, bytesOut: bytesOut))
@@ -57,9 +51,68 @@ struct NettopParser {
         return -1
     }
 
-    /// Simple CSV line parse: split by comma (does not handle quoted commas in process name).
+    private func inferColumnIndexes(from header: [String]) -> (nameIndex: Int, bytesInIndex: Int, bytesOutIndex: Int) {
+        // Historical nettop output has process name at index 1, bytes in/out at 4/5.
+        // Keep those defaults for backward compatibility if matching fails.
+        var nameIndex = 1
+        var bytesInIndex = 4
+        var bytesOutIndex = 5
+
+        for (idx, raw) in header.enumerated() {
+            let key = normalizeHeaderKey(raw)
+
+            if key == "processname" || key == "process" || key == "name" {
+                nameIndex = idx
+            }
+
+            if bytesInIndex == 4, key.contains("bytesin") || key.contains("rxbytes") || key == "bytesreceived" {
+                bytesInIndex = idx
+            }
+
+            if bytesOutIndex == 5, key.contains("bytesout") || key.contains("txbytes") || key == "bytessent" {
+                bytesOutIndex = idx
+            }
+        }
+
+        return (nameIndex, bytesInIndex, bytesOutIndex)
+    }
+
+    private func normalizeHeaderKey(_ s: String) -> String {
+        s.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    /// CSV parser that supports quoted fields and escaped quotes ("").
     private func parseCSVLine(_ line: String) -> [String] {
-        line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+        var fields: [String] = []
+        var current = ""
+        var inQuotes = false
+        var i = line.startIndex
+
+        while i < line.endIndex {
+            let ch = line[i]
+            if ch == "\"" {
+                let next = line.index(after: i)
+                if inQuotes, next < line.endIndex, line[next] == "\"" {
+                    current.append("\"")
+                    i = line.index(after: next)
+                    continue
+                }
+                inQuotes.toggle()
+                i = next
+                continue
+            }
+
+            if ch == ",", !inQuotes {
+                fields.append(current)
+                current.removeAll(keepingCapacity: true)
+            } else {
+                current.append(ch)
+            }
+            i = line.index(after: i)
+        }
+
+        fields.append(current)
+        return fields
     }
 }
 
@@ -78,11 +131,6 @@ final class AppNameResolver {
     func resolve(forPID pid: Int32, fallbackProcessName: String) -> (displayName: String, groupKey: String) {
         let r = _resolve(forPID: pid, fallbackProcessName: fallbackProcessName)
         return (r.displayName, r.groupKey)
-    }
-
-    /// Convenience wrapper kept for any remaining call sites.
-    func appName(forPID pid: Int32, fallbackProcessName: String) -> String {
-        _resolve(forPID: pid, fallbackProcessName: fallbackProcessName).displayName
     }
 
     private func _resolve(forPID pid: Int32, fallbackProcessName: String) -> Resolved {
