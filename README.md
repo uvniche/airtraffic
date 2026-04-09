@@ -1,6 +1,14 @@
 # AirTraffic
 
+macOS CLI Network App
+
+## About
+
 macOS CLI network app that tracks per-app data usage, keeps persistent history, and supports built-in data limits.
+
+- **Per-app usage**: live view plus `today`, `month`, and `since <date>` summaries.
+- **Persistent history**: keep usage over time, export to CSV.
+- **Built-in limits**: set daily caps (overall or per-app) with macOS notifications.
 
 ## Requirements
 
