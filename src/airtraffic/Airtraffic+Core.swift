@@ -315,6 +315,31 @@ extension Airtraffic {
         return "\"\(escaped)\""
     }
 
+    static func collectorLogURL() -> URL {
+        let fm = FileManager.default
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support", isDirectory: true)
+        let dir = base.appendingPathComponent("airtraffic", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("collector.log")
+    }
+
+    static func logCollectorError(_ error: Error) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(timestamp)] collector tick failed: \(String(describing: error))\n"
+        let logURL = collectorLogURL()
+        if let data = line.data(using: .utf8) {
+            if FileManager.default.fileExists(atPath: logURL.path),
+               let handle = try? FileHandle(forWritingTo: logURL) {
+                defer { try? handle.close() }
+                _ = try? handle.seekToEnd()
+                try? handle.write(contentsOf: data)
+            } else {
+                try? data.write(to: logURL, options: .atomic)
+            }
+        }
+    }
+
     static func runCollector(interval: TimeInterval) async {
         LoginItemInstaller.ensureInstalledIfNeeded()
         launchctlBootstrap()
@@ -407,6 +432,7 @@ extension Airtraffic {
                         }
                     }
                 } catch {
+                    logCollectorError(error)
                     return
                 }
             }
@@ -444,17 +470,6 @@ extension Airtraffic {
     static let colUp = 12
     static let colTotal = 10
 
-    static func headerLines() -> [String] {
-        let app = fit("App", width: colName)
-        let down = fit("↓ Down/s", width: colDown)
-        let up = fit("↑ Up/s", width: colUp)
-        let total = fit("Total/s", width: colTotal)
-        return [
-            "\(app) \(down) \(up) \(total)",
-            String(repeating: "─", count: colName + 1 + colDown + 1 + colUp + 1 + colTotal),
-        ]
-    }
-
     static func rowLine(name: String, bytesIn: UInt64, bytesOut: UInt64, interval: TimeInterval) -> String {
         let inRate = Double(bytesIn) / interval
         let outRate = Double(bytesOut) / interval
@@ -469,22 +484,6 @@ extension Airtraffic {
         if s.count < width { return s.padding(toLength: width, withPad: " ", startingAt: 0) }
         if width == 1 { return "…" }
         return String(s.prefix(width - 1)) + "…"
-    }
-
-    static func renderLines(
-        display: [(name: String, bytesIn: UInt64, bytesOut: UInt64)],
-        topN: Int,
-        interval: TimeInterval,
-        includeFooter: Bool
-    ) -> [String] {
-        var lines: [String] = display.prefix(topN).map {
-            rowLine(name: $0.name, bytesIn: $0.bytesIn, bytesOut: $0.bytesOut, interval: interval)
-        }
-        if includeFooter {
-            lines.append("")
-            lines.append("Esc - go back")
-        }
-        return lines
     }
 
     static func openTTY() -> FileHandle {

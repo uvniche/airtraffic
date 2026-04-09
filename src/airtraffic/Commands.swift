@@ -267,6 +267,10 @@ struct LimitCommand {
     let args: [String]
 
     func run() {
+        var args = self.args
+        if args.first == "--total" {
+            args.removeFirst()
+        }
         guard !args.isEmpty else {
             printUsage()
             return
@@ -278,10 +282,7 @@ struct LimitCommand {
         if args.first == "clear" {
             let rest = Array(args.dropFirst())
             let target = rest.joined(separator: " ")
-            if target == "--total" {
-                print("`--total` is no longer supported. Use: airtraffic limit clear <threshold>")
-                return
-            } else if rest.count == 1 && parseBytes(rest[0]) != nil {
+            if rest.count == 1 && parseBytes(rest[0]) != nil {
                 state.totalLimit = nil
                 state.notifiedLimits.remove("__total__")
                 state.persist()
@@ -294,11 +295,6 @@ struct LimitCommand {
                 state.persist()
                 print("Limit cleared for \(target).")
             }
-            return
-        }
-
-        if args.first == "--total" {
-            print("`--total` is no longer supported. Use: airtraffic limit <threshold>")
             return
         }
 
