@@ -8,6 +8,13 @@ struct Airtraffic {
         let primary = args.first
         let once = args.contains("--once") || primary == "once"
 
+        // Default behavior: ensure the clickable “no GUI” app exists in Applications
+        // so users can launch AirTraffic like a normal macOS app.
+        // Skip for the daemonized collector child to avoid extra work during background runs.
+        if !args.contains("--daemonized") {
+            ensureTerminalLauncherAppInstalledIfNeeded()
+        }
+
         // No command -> interactive shell mode.
         if primary == nil {
             await runInteractiveShell(interval: interval)
@@ -16,8 +23,10 @@ struct Airtraffic {
 
         if primary == "daemon" {
             if args.last != "--daemonized" {
-                launchctlBootout()
-                killExistingDaemons()
+                if isCollectorProbablyRunning() {
+                    print("App already running. Collector is up.")
+                    return
+                }
                 let exe = CommandLine.arguments[0]
                 let child = Process()
                 child.executableURL = URL(fileURLWithPath: exe)
