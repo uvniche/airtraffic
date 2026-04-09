@@ -8,11 +8,15 @@ struct Airtraffic {
         let primary = args.first
         let once = args.contains("--once") || primary == "once"
 
-        // Default behavior: ensure the clickable “no GUI” app exists in Applications
-        // so users can launch AirTraffic like a normal macOS app.
+        if shouldOpenTerminalForBundledLaunch(args: args) {
+            openTerminalForBundledLaunch()
+            return
+        }
+
+        // Default behavior: ensure the real AirTraffic app bundle exists in Applications.
         // Skip for the daemonized collector child to avoid extra work during background runs.
         if !args.contains("--daemonized") {
-            ensureTerminalLauncherAppInstalledIfNeeded()
+            ensureBundledAppInstalledIfNeeded()
         }
 
         // No command -> interactive shell mode.
@@ -23,19 +27,9 @@ struct Airtraffic {
 
         if primary == "daemon" {
             if args.last != "--daemonized" {
-                if isCollectorProbablyRunning() {
-                    print("App already running. Collector is up.")
-                    return
-                }
-                let exe = CommandLine.arguments[0]
-                let child = Process()
-                child.executableURL = URL(fileURLWithPath: exe)
-                child.arguments = ["daemon", "--daemonized"]
-                child.standardInput  = FileHandle.nullDevice
-                child.standardOutput = FileHandle.nullDevice
-                child.standardError  = FileHandle.nullDevice
-                try? child.run()
-                print("App started. Running in the background.")
+                let wasRunning = isCollectorProbablyRunning()
+                startCollectorIfNeeded()
+                print(wasRunning ? "App already running. Collector is up." : "App started. Running in the background.")
                 return
             }
             await runCollector(interval: interval)

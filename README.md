@@ -34,7 +34,7 @@ Or with Xcode:
 swift run airtraffic
 ```
 
-You can also launch it from **Applications** via `AirTraffic.app` (it opens Terminal and runs the CLI).
+You can also launch it from **Applications** via `AirTraffic.app` (opens Terminal and runs AirTraffic).
 
 Then use commands inside the interactive prompt:
 
@@ -50,6 +50,8 @@ Or with Xcode:
 ## Commands
 
 `help` – list commands grouped by category (`Usage` and `Limits`).
+
+`home` – return to the startup home screen shown after `swift run airtraffic`.
 
 ### Usage
 
