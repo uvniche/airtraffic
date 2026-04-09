@@ -13,7 +13,7 @@ macOS CLI network app that tracks per-app data usage, keeps persistent history, 
 ## Requirements
 
 - **macOS 13+** (Ventura or later)
-- **Xcode Command Line Tools** (or Xcode). Install with: `xcode-select --install`
+- **Xcode** ([Mac App Store](https://apps.apple.com/app/xcode/id497799835)) **or Xcode Command Line Tools** ([Apple downloads](https://developer.apple.com/download/more/), search “Command Line Tools”, or `xcode-select --install`)
 
 ## Build
 
@@ -23,17 +23,29 @@ From the project directory:
 swift build
 ```
 
+Or with Xcode:
+
+- Open `Package.swift` in Xcode
+- Product → Build (or press `⌘B`)
+
 ## Run
 
 ```bash
 swift run airtraffic
 ```
 
+You can also launch it from **Applications** via `AirTraffic.app` (it opens Terminal and runs the CLI).
+
 Then use commands inside the interactive prompt:
 
 ```text
 airtraffic> command
 ```
+
+Or with Xcode:
+
+- Open `Package.swift` in Xcode
+- Product → Run (or press `⌘R`)
 
 ## Commands
 

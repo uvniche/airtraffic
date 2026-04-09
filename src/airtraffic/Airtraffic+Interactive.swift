@@ -144,14 +144,10 @@ extension Airtraffic {
     }
 
     static func startBackgroundAppIfNeeded() {
-        if let state = AirtrafficState.load() {
-            let now = Date()
-            let active = now.timeIntervalSince(state.lastUpdate) < 10
-            if active { return }
-        }
+        if isCollectorProbablyRunning() { return }
 
-        launchctlBootout()
-        killExistingDaemons()
+        // Start the collector only if it isn't already running. Avoid booting out / killing
+        // existing jobs here so repeated `swift run airtraffic` is safe/idempotent.
         let exe = CommandLine.arguments[0]
         let child = Process()
         child.executableURL = URL(fileURLWithPath: exe)
