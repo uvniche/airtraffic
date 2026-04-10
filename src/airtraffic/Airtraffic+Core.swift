@@ -4,45 +4,6 @@ import AppKit
 import UserNotifications
 
 extension Airtraffic {
-    static func shouldOpenTerminalForBundledLaunch(args: [String]) -> Bool {
-        // Only open Terminal when the app is launched directly (no CLI subcommand).
-        // LaunchAgent runs use args like `daemon` and must stay headless.
-        if !args.isEmpty { return false }
-        if args.contains("--terminal-ui") { return false }
-        if args.contains("--daemonized") { return false }
-        if isatty(STDIN_FILENO) != 0 { return false }
-        return Bundle.main.bundleURL.path.hasSuffix(".app")
-    }
-
-    static func openTerminalForBundledLaunch() {
-        let repoPath = bundledAppRepoPath() ?? FileManager.default.currentDirectoryPath
-        let tmpDir = ProcessInfo.processInfo.environment["TMPDIR"] ?? "/tmp"
-        let cmdFile = URL(fileURLWithPath: tmpDir, isDirectory: true)
-            .appendingPathComponent("airtraffic-app-launch.command")
-
-        let escapedRepo = repoPath
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-        let script = """
-        #!/bin/zsh
-        set -euo pipefail
-        cd "\(escapedRepo)"
-        exec swift run airtraffic
-        """
-
-        do {
-            try script.write(to: cmdFile, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cmdFile.path)
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            proc.arguments = [cmdFile.path]
-            try proc.run()
-        } catch {
-            // If opening Terminal fails, continue with normal CLI behavior.
-            return
-        }
-    }
-
     static func currentExecutableURL() -> URL {
         let fm = FileManager.default
         if let url = Bundle.main.executableURL {
@@ -56,34 +17,13 @@ extension Airtraffic {
         return URL(fileURLWithPath: arg0, relativeTo: URL(fileURLWithPath: cwd)).standardizedFileURL
     }
 
-    static func preferredCollectorExecutableURL() -> URL {
-        let fm = FileManager.default
-        let appName = "AirTraffic"
-        let appCandidates = [
-            URL(fileURLWithPath: "/Applications", isDirectory: true),
-            fm.homeDirectoryForCurrentUser.appendingPathComponent("Applications", isDirectory: true)
-        ]
-        for base in appCandidates {
-            let exe = base
-                .appendingPathComponent("\(appName).app", isDirectory: true)
-                .appendingPathComponent("Contents", isDirectory: true)
-                .appendingPathComponent("MacOS", isDirectory: true)
-                .appendingPathComponent(appName)
-            if fm.isExecutableFile(atPath: exe.path) {
-                return exe
-            }
-        }
-        return currentExecutableURL()
-    }
-
     static func startCollectorIfNeeded() {
-        let desiredExe = preferredCollectorExecutableURL().path
+        let desiredExe = currentExecutableURL().path
         if isCollectorProbablyRunning() {
             if runningCollectorProgramPathFromLaunchctl() == desiredExe {
                 return
             }
             // Migration path: collector is up, but using a different executable path.
-            // Restart once so notifications come from the AirTraffic app identity.
             launchctlBootout()
             killExistingDaemons()
         }
@@ -108,105 +48,6 @@ extension Airtraffic {
         guard let pid = runningCollectorPIDFromLaunchctl() else { return false }
         // `kill(pid, 0)` doesn't actually signal; it checks for existence/permission.
         return kill(pid, 0) == 0
-    }
-
-    static func ensureBundledAppInstalledIfNeeded() {
-        let repoDir = FileManager.default.currentDirectoryPath
-        guard FileManager.default.fileExists(atPath: repoDir) else { return }
-
-        let fm = FileManager.default
-        let appName = "AirTraffic"
-        let primaryAppURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
-            .appendingPathComponent("\(appName).app", isDirectory: true)
-        let userAppsURL = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent("Applications", isDirectory: true)
-            .appendingPathComponent("\(appName).app", isDirectory: true)
-
-        // Prefer /Applications, fall back to ~/Applications.
-        let targetAppURL: URL = {
-            if fm.isWritableFile(atPath: "/Applications") { return primaryAppURL }
-            return userAppsURL
-        }()
-
-        let bundledExecutableURL = targetAppURL
-            .appendingPathComponent("Contents", isDirectory: true)
-            .appendingPathComponent("MacOS", isDirectory: true)
-            .appendingPathComponent(appName)
-
-        let sourceExecutable = currentExecutableURL()
-        guard fm.fileExists(atPath: sourceExecutable.path) else { return }
-
-        // If already installed and byte-identical to the current executable, do nothing.
-        if fm.fileExists(atPath: bundledExecutableURL.path),
-           let srcData = try? Data(contentsOf: sourceExecutable),
-           let dstData = try? Data(contentsOf: bundledExecutableURL),
-           srcData == dstData {
-            return
-        }
-
-        do {
-            // Remove any stale install so updates are clean.
-            if fm.fileExists(atPath: targetAppURL.path) {
-                try fm.removeItem(at: targetAppURL)
-            }
-
-            let contents = targetAppURL.appendingPathComponent("Contents", isDirectory: true)
-            let macosDir = contents.appendingPathComponent("MacOS", isDirectory: true)
-            let resourcesDir = contents.appendingPathComponent("Resources", isDirectory: true)
-            try fm.createDirectory(at: macosDir, withIntermediateDirectories: true)
-            try fm.createDirectory(at: resourcesDir, withIntermediateDirectories: true)
-
-            let infoPlist = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-              <key>CFBundleDevelopmentRegion</key>
-              <string>en</string>
-              <key>CFBundleDisplayName</key>
-              <string>\(appName)</string>
-              <key>CFBundleExecutable</key>
-              <string>\(appName)</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.uvniche.airtraffic.app</string>
-              <key>CFBundleInfoDictionaryVersion</key>
-              <string>6.0</string>
-              <key>CFBundleName</key>
-              <string>\(appName)</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>CFBundleShortVersionString</key>
-              <string>1.0</string>
-              <key>CFBundleVersion</key>
-              <string>1</string>
-              <key>LSMinimumSystemVersion</key>
-              <string>13.0</string>
-              <key>LSUIElement</key>
-              <true/>
-            </dict>
-            </plist>
-            """
-            try infoPlist.write(to: contents.appendingPathComponent("Info.plist"), atomically: true, encoding: .utf8)
-            try fm.copyItem(at: sourceExecutable, to: bundledExecutableURL)
-            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bundledExecutableURL.path)
-            let repoPathFile = resourcesDir.appendingPathComponent("repo-path.txt")
-            try repoDir.write(to: repoPathFile, atomically: true, encoding: .utf8)
-        } catch {
-            // If we can't install/update the launcher, don't break the CLI.
-            return
-        }
-    }
-
-    private static func bundledAppRepoPath() -> String? {
-        guard let repoFile = Bundle.main.url(forResource: "repo-path", withExtension: "txt") else {
-            return nil
-        }
-        guard let raw = try? String(contentsOf: repoFile, encoding: .utf8) else {
-            return nil
-        }
-        let path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !path.isEmpty else { return nil }
-        return path
     }
 
     private static func runningCollectorPIDFromLaunchctl() -> pid_t? {
@@ -259,7 +100,7 @@ extension Airtraffic {
         guard proc.terminationStatus == 0 else { return nil }
 
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        // Example line: "program = /Applications/AirTraffic.app/Contents/MacOS/AirTraffic"
+        // Example line: "program = /path/to/airtraffic"
         for line in output.split(separator: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard trimmed.hasPrefix("program =") else { continue }
