@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="airtraffic-icon.png" alt="AirTraffic" width="96" />
+</p>
+
 # AirTraffic
 
 macOS CLI Network App
