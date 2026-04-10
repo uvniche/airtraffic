@@ -1,3 +1,7 @@
+<p align="left">
+  <img src="airtraffic-icon.png" alt="AirTraffic" width="128" />
+</p>
+
 # AirTraffic
 
 macOS CLI network app that tracks per-app data usage, keeps persistent history & supports built-in data limits.
