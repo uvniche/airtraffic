@@ -1,4 +1,4 @@
-<p align="center">
+<p align="left">
   <img src="airtraffic-icon.png" alt="AirTraffic" width="96" />
 </p>
 
