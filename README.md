@@ -1,10 +1,6 @@
-<p align="left">
-  <img src="airtraffic-icon.png" alt="AirTraffic" width="128" />
-</p>
-
 # AirTraffic
 
-macOS CLI network app that tracks per-app data usage, keeps persistent history, and supports built-in data limits.
+macOS CLI network app that tracks per-app data usage, keeps persistent history & supports built-in data limits.
 
 ## Requirements
 
@@ -71,7 +67,7 @@ From the project directory:
 swift run airtraffic uninstall
 ```
 
-Removes the app and all stored data.
+Removes the app & all stored data.
 
 ## License
 
