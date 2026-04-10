@@ -1,5 +1,5 @@
 <p align="left">
-  <img src="airtraffic-icon.png" alt="AirTraffic" width="96" />
+  <img src="airtraffic-icon.png" alt="AirTraffic" width="128" />
 </p>
 
 # AirTraffic
