@@ -98,7 +98,7 @@ enum LoginItemInstaller {
     static func ensureInstalledIfNeeded() {
         let fm = FileManager.default
         let plistURL = Self.plistURL
-        let executableURL = Airtraffic.preferredCollectorExecutableURL()
+        let executableURL = Airtraffic.currentExecutableURL()
         var shouldRewrite = true
 
         if fm.fileExists(atPath: plistURL.path),
