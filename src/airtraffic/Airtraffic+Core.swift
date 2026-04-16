@@ -222,14 +222,17 @@ extension Airtraffic {
                     for row in byApp {
                         let key = row.name
                         let previous = state.lastSnapshot[key] ?? AppUsage(bytesIn: 0, bytesOut: 0)
-                        let dIn = row.bytesIn >= previous.bytesIn ? row.bytesIn - previous.bytesIn : 0
-                        let dOut = row.bytesOut >= previous.bytesOut ? row.bytesOut - previous.bytesOut : 0
+                        // If per-process counters reset/restart, treat current sample as new baseline traffic
+                        // (same behavior as `live`) instead of dropping the app from cumulative views.
+                        let dIn = row.bytesIn >= previous.bytesIn ? row.bytesIn - previous.bytesIn : row.bytesIn
+                        let dOut = row.bytesOut >= previous.bytesOut ? row.bytesOut - previous.bytesOut : row.bytesOut
+                        state.lastSnapshot[key] = AppUsage(bytesIn: row.bytesIn, bytesOut: row.bytesOut)
                         if dIn == 0 && dOut == 0 { continue }
+
                         var todayUsage = state.todayByApp[key] ?? AppUsage(bytesIn: 0, bytesOut: 0)
                         todayUsage.bytesIn &+= dIn
                         todayUsage.bytesOut &+= dOut
                         state.todayByApp[key] = todayUsage
-                        state.lastSnapshot[key] = AppUsage(bytesIn: row.bytesIn, bytesOut: row.bytesOut)
 
                         var monthUsage = state.monthByApp[key] ?? AppUsage(bytesIn: 0, bytesOut: 0)
                         monthUsage.bytesIn &+= dIn
