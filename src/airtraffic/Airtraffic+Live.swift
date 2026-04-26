@@ -176,7 +176,7 @@ extension Airtraffic {
             }
 
             guard let state = AirtrafficState.load() else {
-                ttyWrite(tty, terminalResetPrefix() + "Waiting for data…\n\nEsc - Back")
+                ttyWrite(tty, terminalResetPrefix() + "Waiting for data\n\nEsc - Back")
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 continue
             }
@@ -357,7 +357,7 @@ extension Airtraffic {
                 out += "Controls: → - Next, ← - Previous, Esc - Back"
                 ttyWrite(tty, out)
             } else {
-                ttyWrite(tty, terminalResetPrefix() + "Waiting for data…\n\nEsc - Back")
+                ttyWrite(tty, terminalResetPrefix() + "Waiting for data\n\nEsc - Back")
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
