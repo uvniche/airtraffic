@@ -96,7 +96,7 @@ struct HelpCommand {
           live - Live per-app view, refresh every second
           today - Per-app usage since 12:00 AM today
           month - Per-app usage since 12:00 AM on the first day of the current month
-          since - Per-app usage since a specific date & time (format: dd:MM:yyyy HH:mm)
+          since - Per-app usage since a specific date and time (format: dd:MM:yyyy HH:mm)
           export - Export per-app usage as a CSV file (period: today, month, or since)
         """)
     }
@@ -197,7 +197,7 @@ struct SinceCommand {
 struct ExportCommand {
     let args: [String]
 
-    /// <repo>/exports/ — all CSV exports land here.
+    /// <repo>/exports/ - all CSV exports land here.
     static var exportDir: URL {
         URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent("exports", isDirectory: true)
@@ -298,7 +298,7 @@ struct LimitCommand {
             return
         }
 
-        // limit <threshold> — single bare size treated as overall limit
+        // limit <threshold> - single bare size treated as overall limit
         if args.count == 1, let bytes = parseBytes(args[0]) {
             state.totalLimit = bytes
             state.notifiedLimits.remove("__total__")
@@ -375,7 +375,7 @@ struct LimitsCommand {
             let cap = state.totalLimit!
             let used = state.todayByApp.values.reduce(UInt64(0)) { $0 + $1.bytesIn + $1.bytesOut }
             let pct = min(100, Int(Double(used) / Double(cap) * 100))
-            let status = used >= cap ? " ⚠ EXCEEDED" : ""
+            let status = used >= cap ? " EXCEEDED" : ""
             print("Overall:  \(formatBytesLimit(used)) / \(formatBytesLimit(cap))  (\(pct)%)\(status)")
         }
 
@@ -386,7 +386,7 @@ struct LimitsCommand {
                 let usage = state.todayByApp[app]
                 let used = (usage?.bytesIn ?? 0) + (usage?.bytesOut ?? 0)
                 let pct = min(100, Int(Double(used) / Double(cap) * 100))
-                let status = used >= cap ? " ⚠ EXCEEDED" : ""
+                let status = used >= cap ? " EXCEEDED" : ""
                 let appCol = app.padding(toLength: 28, withPad: " ", startingAt: 0)
                 print("\(appCol)  \(formatBytesLimit(used)) / \(formatBytesLimit(cap))  (\(pct)%)\(status)")
             }

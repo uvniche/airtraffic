@@ -4,7 +4,7 @@
 
 # AirTraffic
 
-macOS CLI network app that tracks per-app data usage, keeps persistent history & supports built-in data limits.
+macOS CLI network app that tracks per-app data usage, keeps persistent history and supports built-in data limits.
 
 ## Requirements
 
@@ -49,7 +49,7 @@ airtraffic> command
 
 `month` – per-app usage since 12:00 AM on the first day of the current month.
 
-`since <dd:MM:yyyy HH:mm>` – per-app usage since a specific date & time.
+`since <dd:MM:yyyy HH:mm>` – per-app usage since a specific date and time.
 
 `export <today|month|since>` – export per-app usage as a CSV file.
 
@@ -71,7 +71,7 @@ From the project directory:
 swift run airtraffic uninstall
 ```
 
-Removes the app & all stored data.
+Removes the app and all stored data.
 
 ## License
 

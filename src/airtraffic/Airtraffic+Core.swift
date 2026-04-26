@@ -326,8 +326,7 @@ extension Airtraffic {
         if width <= 0 { return "" }
         if s.count == width { return s }
         if s.count < width { return s.padding(toLength: width, withPad: " ", startingAt: 0) }
-        if width == 1 { return "…" }
-        return String(s.prefix(width - 1)) + "…"
+        return String(s.prefix(width))
     }
 
     static func openTTY() -> FileHandle {
