@@ -36,7 +36,7 @@ struct NettopParser {
         return rows
     }
 
-    /// Extract PID from nettop process column (e.g. "Chrome.12345" or "Cursor Helper (.5306").
+    /// Extract PID from nettop process column (e.g. "Chrome.12345" or "Some Helper (.5306").
     private func extractPID(from name: String) -> Int32 {
         if let dot = name.lastIndex(of: ".") {
             let after = name[name.index(after: dot)...]
@@ -176,7 +176,7 @@ final class AppNameResolver {
         }
 
         // Strip Electron/Chromium/plugin helper suffixes so e.g.:
-        //   "Cursor Helper (Renderer)", "Cursor Helper (Plugin): extension-host",
+        //   "Example Helper (Renderer)", "Example Helper (Plugin): extension-host",
         //   "Google Chrome Helper", "ChatGPTHelper"
         // all collapse to just the app name.
         if let helperRange = raw.range(of: "\\s*Helper.*", options: [.regularExpression, .caseInsensitive]) {
