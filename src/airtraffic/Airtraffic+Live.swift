@@ -141,99 +141,6 @@ extension Airtraffic {
 // MARK: - Shared live-table helpers for cumulative views
 
 extension Airtraffic {
-    static func runTodayLive() async {
-        let interval: TimeInterval = 1.0
-        let pageSize = 10
-        let tty = openTTY()
-        let displayFormatter = DateFormatter()
-        displayFormatter.locale = Locale(identifier: "en_US_POSIX")
-        displayFormatter.dateFormat = "dd:MM:yyyy HH:mm"
-        var currentPage = 0
-
-        ttyWrite(tty, "\u{1B}[?1049h" + terminalResetPrefix())
-        rawModeInputFD = STDIN_FILENO
-        let savedTermios = enableRawMode(tty: FileHandle.standardInput)
-        let sigHandler: @convention(c) (Int32) -> Void = { _ in
-            var s = rawModeSaved
-            tcsetattr(rawModeInputFD, TCSAFLUSH, &s)
-            let restoreTTY = FileHandle(forWritingAtPath: "/dev/tty") ?? FileHandle.standardOutput
-            if let d = "\u{1B}[?1049l".data(using: .utf8) { restoreTTY.write(d) }
-            exit(0)
-        }
-        rawModeSaved = savedTermios
-        signal(SIGINT, sigHandler)
-
-        while true {
-            if let key = readNavigationKeyNonBlocking() {
-                if key == .nextPage {
-                    currentPage += 1
-                } else if key == .previousPage {
-                    currentPage = max(0, currentPage - 1)
-                } else if key == .goBack {
-                    exitLiveView(savedTermios: savedTermios, tty: tty)
-                    return
-                }
-            }
-
-            guard let state = AirtrafficState.load() else {
-                ttyWrite(tty, terminalResetPrefix() + "Waiting for data\n\nEsc - Back")
-                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-                continue
-            }
-
-            let now = Date()
-            guard Calendar.current.isDate(now, inSameDayAs: state.todayStart), !state.todayByApp.isEmpty else {
-                ttyWrite(tty, terminalResetPrefix() + "No data recorded for today yet.\n\nEsc - Back")
-                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-                continue
-            }
-
-            let ranked = state.todayByApp
-                .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
-                .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
-
-            let totalPages = max(1, Int(ceil(Double(ranked.count) / Double(pageSize))))
-            currentPage = min(currentPage, totalPages - 1)
-            let start = currentPage * pageSize
-            let end = min(start + pageSize, ranked.count)
-            let pageRows = start < end ? Array(ranked[start..<end]) : []
-
-            let sinceDate = state.collectorStart
-            var out = terminalResetPrefix()
-            out += "AirTraffic - Today (since \(displayFormatter.string(from: sinceDate)))\n\n"
-            out += fit("No.", width: 5) + " "
-            out += fit("App", width: colName - 6) + " "
-            out += fit("↓ Down", width: colDown) + " "
-            out += fit("↑ Up", width: colUp) + " "
-            out += fit("Total", width: colTotal) + "\n"
-            out += String(repeating: "─", count: 5 + 1 + (colName - 6) + 1 + colDown + 1 + colUp + 1 + colTotal) + "\n"
-
-            for (idx, row) in pageRows.enumerated() {
-                let rank = start + idx + 1
-                out += fit("\(rank)", width: 5) + " "
-                out += fit(row.name, width: colName - 6) + " "
-                out += fit(formatBytes(row.bytesIn), width: colDown) + " "
-                out += fit(formatBytes(row.bytesOut), width: colUp) + " "
-                out += fit(formatBytes(row.bytesIn + row.bytesOut), width: colTotal) + "\n"
-            }
-
-            let totalIn = ranked.reduce(UInt64(0)) { $0 + $1.bytesIn }
-            let totalOut = ranked.reduce(UInt64(0)) { $0 + $1.bytesOut }
-            out += String(repeating: "─", count: 5 + 1 + (colName - 6) + 1 + colDown + 1 + colUp + 1 + colTotal) + "\n"
-            out += fit("", width: 5) + " "
-            out += fit("TOTAL", width: colName - 6) + " "
-            out += fit(formatBytes(totalIn), width: colDown) + " "
-            out += fit(formatBytes(totalOut), width: colUp) + " "
-            out += fit(formatBytes(totalIn + totalOut), width: colTotal) + "\n"
-            out += "\n"
-            out += "Page \(currentPage + 1)/\(totalPages)\n"
-            out += "Controls: → - Next, ← - Previous, Esc - Back"
-            ttyWrite(tty, out)
-
-            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-        }
-    }
-
     enum NavigationKey {
         case nextPage
         case previousPage
@@ -299,9 +206,10 @@ extension Airtraffic {
     }
 
     static func runLiveCumulative(
+        interval: TimeInterval = 0.2,
+        emptyMessage: String = "Waiting for data",
         dataProvider: () -> (title: String, apps: [(name: String, bytesIn: UInt64, bytesOut: UInt64)])?
     ) async {
-        let interval: TimeInterval = 0.2
         let pageSize = 10
         let tty = openTTY()
         var currentPage = 0
@@ -357,7 +265,7 @@ extension Airtraffic {
                 out += "Controls: → - Next, ← - Previous, Esc - Back"
                 ttyWrite(tty, out)
             } else {
-                ttyWrite(tty, terminalResetPrefix() + "Waiting for data\n\nEsc - Back")
+                ttyWrite(tty, terminalResetPrefix() + "\(emptyMessage)\n\nEsc - Back")
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }

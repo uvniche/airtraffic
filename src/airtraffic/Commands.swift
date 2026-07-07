@@ -119,7 +119,23 @@ struct HelpCommand {
 
 struct TodayCommand {
     func run() async {
-        await Airtraffic.runTodayLive()
+        let displayFormatter = DateFormatter()
+        displayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        displayFormatter.dateFormat = "dd:MM:yyyy HH:mm"
+
+        await Airtraffic.runLiveCumulative(
+            interval: 1.0,
+            emptyMessage: "No data recorded for today yet."
+        ) {
+            guard let state = AirtrafficState.load() else { return nil }
+            let now = Date()
+            guard Calendar.current.isDate(now, inSameDayAs: state.todayStart),
+                  !state.todayByApp.isEmpty else { return nil }
+            let apps = state.todayByApp
+                .map { (name: $0.key, bytesIn: $0.value.bytesIn, bytesOut: $0.value.bytesOut) }
+                .sorted { ($0.bytesIn + $0.bytesOut) > ($1.bytesIn + $1.bytesOut) }
+            return ("AirTraffic - Today (since \(displayFormatter.string(from: state.collectorStart)))", apps)
+        }
     }
 }
 
