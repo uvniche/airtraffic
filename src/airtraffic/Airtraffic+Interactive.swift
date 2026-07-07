@@ -93,7 +93,7 @@ extension Airtraffic {
     static func renderInteractiveHome() {
         clearTerminal()
         print("AirTraffic")
-        print("macOS CLI Network App")
+        print("macOS Network CLI App")
         print("")
         print("Type 'help' for commands, 'home' to return here, Ctrl+C to quit.")
     }
