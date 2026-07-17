@@ -33,13 +33,13 @@ Enter commands at the prompt:
 airtraffic> command
 ```
 
-To stop the background collector from the project directory, run:
+To stop the app, run:
 
 ```bash
 swift run airtraffic stop
 ```
 
-Run `swift run airtraffic` again to resume data collection.
+Run `swift run airtraffic` again to restart the app.
 
 ## Commands
 
@@ -47,7 +47,7 @@ Run `swift run airtraffic` again to resume data collection.
 
 `home` – returns to the startup home screen shown after `swift run airtraffic`.
 
-`stop` – stops the background collector without removing stored data, limits, or the app.
+`stop` – stops the app without removing its stored data or limits.
 
 ### Usage
 
