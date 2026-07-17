@@ -12,7 +12,11 @@ struct Airtraffic {
             return
         }
 
-        // Only supported one-shot: uninstall (e.g. `swift run airtraffic uninstall`).
+        if args == ["stop"] {
+            StopCommand().run()
+            return
+        }
+
         if args == ["uninstall"] {
             UninstallCommand().run()
             return
