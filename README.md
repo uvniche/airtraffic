@@ -39,6 +39,16 @@ airtraffic> command
 
 `home` – return to the startup home screen shown after `swift run airtraffic`.
 
+`stop` – stop the background collector without removing stored data, limits, or the app.
+
+You can also stop it directly from the project directory:
+
+```bash
+swift run airtraffic stop
+```
+
+Run `swift run airtraffic` again to resume collecting.
+
 ### Usage
 
 `status` – show how long the app has been running.
