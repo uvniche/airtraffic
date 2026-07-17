@@ -54,6 +54,18 @@ struct StatusCommand {
     }
 }
 
+// MARK: - airtraffic stop
+
+struct StopCommand {
+    func run() {
+        let wasRunning = Airtraffic.isCollectorProbablyRunning()
+        Airtraffic.launchctlBootout()
+        Airtraffic.killExistingDaemons()
+
+        print(wasRunning ? "Collector stopped. Your data and settings were kept." : "Collector is already stopped.")
+    }
+}
+
 // MARK: - airtraffic help
 
 struct HelpCommand {
@@ -84,6 +96,9 @@ struct HelpCommand {
         Categories:
           usage
           limits
+
+        Commands:
+          stop - Stop collecting data without uninstalling
         """)
     }
 
@@ -93,6 +108,7 @@ struct HelpCommand {
 
         Usage:
           status - Show how long the app has been running
+          stop - Stop collecting data without uninstalling
           live - Live per-app view, refresh every second
           today - Per-app usage since 12:00 AM today
           month - Per-app usage since 12:00 AM on the first day of the current month

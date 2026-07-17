@@ -47,6 +47,10 @@ extension Airtraffic {
                 StatusCommand().run()
                 continue
             }
+            if command == "stop" {
+                StopCommand().run()
+                continue
+            }
             if command == "today" {
                 await TodayCommand().run()
                 showHomeView = true
