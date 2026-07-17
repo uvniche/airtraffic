@@ -4,7 +4,7 @@
 
 # AirTraffic
 
-macOS network CLI app that tracks per-app data usage, keeps persistent history and supports built-in data limits.
+A macOS network CLI app that tracks per-app data usage, maintains a persistent history, and supports built-in data limits.
 
 ## Requirements
 
@@ -27,51 +27,51 @@ From the project directory:
 swift run airtraffic
 ```
 
-Run commands inside the prompt:
+Enter commands at the prompt:
 
 ```text
 airtraffic> command
 ```
 
-## Commands
-
-`help` – list commands grouped by category (`Usage` and `Limits`).
-
-`home` – return to the startup home screen shown after `swift run airtraffic`.
-
-`stop` – stop the background collector without removing stored data, limits, or the app.
-
-You can also stop it directly from the project directory:
+To stop the background collector from the project directory, run:
 
 ```bash
 swift run airtraffic stop
 ```
 
-Run `swift run airtraffic` again to resume collecting.
+Run `swift run airtraffic` again to resume data collection.
+
+## Commands
+
+`help` – lists commands grouped by category (`Usage` and `Limits`).
+
+`home` – returns to the startup home screen shown after `swift run airtraffic`.
+
+`stop` – stops the background collector without removing stored data, limits, or the app.
 
 ### Usage
 
-`status` – show how long the app has been running.
+`status` – shows how long the app has been running.
 
-`live` – live per-app view, refresh every second.
+`live` – shows a live per-app view that refreshes every second.
 
-`today` – per-app usage since 12:00 AM today.
+`today` – shows per-app usage since 12:00 AM today.
 
-`month` – per-app usage since 12:00 AM on the first day of the current month.
+`month` – shows per-app usage since 12:00 AM on the first day of the current month.
 
-`since <dd:MM:yyyy HH:mm>` – per-app usage since a specific date and time.
+`since <dd:MM:yyyy HH:mm>` – shows per-app usage since a specific date and time.
 
-`export <today|month|since>` – export per-app usage as a CSV file.
+`export <today|month|since>` – exports per-app usage as a CSV file.
 
 ### Limits
 
-`limit <threshold>` – set an overall daily data cap. Sends a macOS notification when exceeded.
+`limit <threshold>` – sets an overall daily data cap and sends a macOS notification when the cap is exceeded.
 
-`limit <app> <threshold>` – set a daily per-app data cap.
+`limit <app> <threshold>` – sets a daily per-app data cap.
 
-`limits` – show all active limits with current usage vs cap.
+`limits` – shows all active limits with current usage versus the cap.
 
-`limit clear <app|threshold>` – remove a limit.
+`limit clear <app|threshold>` – removes a limit.
 
 ## Uninstall
 
@@ -81,7 +81,7 @@ From the project directory:
 swift run airtraffic uninstall
 ```
 
-Removes the app and all stored data.
+This removes the app and all stored data.
 
 ## License
 
