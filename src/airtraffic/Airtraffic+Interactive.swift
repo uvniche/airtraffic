@@ -36,7 +36,7 @@ extension Airtraffic {
                 if tail.last != "--daemonized" {
                     let wasRunning = isCollectorProbablyRunning()
                     startCollectorIfNeeded()
-                    print(wasRunning ? "App already running. Collector is up." : "App started. Running in the background.")
+                    print(wasRunning ? "App is already running." : "App started. Running in the background.")
                     continue
                 }
                 await runCollector(interval: interval)
