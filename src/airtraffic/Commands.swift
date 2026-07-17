@@ -62,7 +62,7 @@ struct StopCommand {
         Airtraffic.launchctlBootout()
         Airtraffic.killExistingDaemons()
 
-        print(wasRunning ? "Collector stopped. Your data and settings were kept." : "Collector is already stopped.")
+        print(wasRunning ? "App stopped. Your stored data and limits were kept." : "App is already stopped.")
     }
 }
 
