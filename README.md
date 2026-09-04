@@ -26,31 +26,30 @@ brew upgrade uvniche/airtraffic/airtraffic
 
 ## Run
 
-Run AirTraffic in your terminal:
+Run one AirTraffic command at a time in your terminal:
 
 ```bash
-airtraffic
+airtraffic <command>
 ```
 
-Then enter commands at the prompt:
-
-```text
-airtraffic> command
-```
-
-To quit the app, run:
+Running `airtraffic` without a command prints a usage hint and exits. Run the
+single help command to see all usage and limit commands:
 
 ```bash
-airtraffic quit
+airtraffic help
 ```
 
-Run `airtraffic` again to restart the app.
+For example, to show today's usage:
+
+```bash
+airtraffic today
+```
+
+Commands that collect or display usage start the background collector automatically.
 
 ## Commands
 
-`help` – lists commands grouped by category (`Usage` and `Limits`).
-
-`home` – returns to the startup home screen in interactive mode.
+`help` – shows all usage and limit commands.
 
 `quit` – quits the app without removing its stored data or limits.
 

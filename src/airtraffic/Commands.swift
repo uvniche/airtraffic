@@ -69,69 +69,29 @@ struct StopCommand {
 // MARK: - airtraffic help
 
 struct HelpCommand {
-    let args: [String]
-
     func run() {
-        let topic = args.first?.lowercased()
-        switch topic {
-        case nil:
-            printRoot()
-        case "usage":
-            printUsage()
-        case "limits":
-            printLimits()
-        default:
-            print("Unknown category: \(topic!)")
-            print("")
-            printRoot()
-        }
-    }
-
-    private func printRoot() {
         print("""
         AirTraffic
-
-        Usage:
-          airtraffic                 Run the interactive shell
-          airtraffic <command>       Run a command directly
-          airtraffic help <category> Show help for a category
-
-        Categories:
-          usage
-          limits
 
         Commands:
-          quit - Quit without removing stored data or limits
-        """)
-    }
-
-    private func printUsage() {
-        print("""
-        AirTraffic
-
-        Usage:
+          help - Show this help
           status - Show how long the app has been running
           quit - Quit without removing stored data or limits
           live - Live per-app view, refresh every second
+          once - Show a single per-app network usage snapshot
           today - Per-app usage since 12:00 AM today
           month - Per-app usage since 12:00 AM on the first day of the current month
-          since - Per-app usage since a specific date and time (format: dd:MM:yyyy HH:mm)
-          export - Export per-app usage as a CSV file (period: today, month, or since)
-        """)
-    }
-
-    private func printLimits() {
-        print("""
-        AirTraffic
+          since <dd:MM:yyyy HH:mm> - Per-app usage since a specific date and time
+          export <today|month|since> - Export per-app usage as a CSV file
+          uninstall - Remove stored data and the login item
 
         Limits:
           limit <app> <threshold> - Set a daily per-app data cap. Sends a macOS notification when exceeded
           limit <threshold> - Set an overall daily data cap (default when app is omitted)
           limits - Show all active limits with current usage vs cap
-          limit clear - Remove a limit
+          limit clear <app|threshold> - Remove a limit
         """)
     }
-
 }
 
 // MARK: - airtraffic today
