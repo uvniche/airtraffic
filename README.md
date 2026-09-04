@@ -63,13 +63,13 @@ airtraffic help
 
 ## Uninstall
 
-First quit AirTraffic and remove its stored data and login item:
+Quit AirTraffic and remove its stored data and login item:
 
 ```bash
 airtraffic uninstall
 ```
 
-Then remove the Homebrew package:
+Remove the Homebrew package:
 
 ```bash
 brew uninstall airtraffic
