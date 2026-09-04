@@ -9,6 +9,7 @@ A macOS network CLI app that tracks per-app data usage, maintains a persistent h
 ## Requirements
 
 - **macOS 13+** (Ventura or later)
+- **Apple silicon Mac**
 - **Xcode Command Line Tools** (`xcode-select --install`)
 - **Homebrew** ([brew.sh](https://brew.sh/))
 
@@ -16,13 +17,13 @@ A macOS network CLI app that tracks per-app data usage, maintains a persistent h
 
 ```bash
 brew tap uvniche/airtraffic https://github.com/uvniche/airtraffic
-brew install --HEAD uvniche/airtraffic/airtraffic
+brew install uvniche/airtraffic/airtraffic
 ```
 
 ## Update
 
 ```bash
-brew upgrade --fetch-HEAD uvniche/airtraffic/airtraffic
+brew upgrade uvniche/airtraffic/airtraffic
 ```
 
 ## Run
