@@ -10,24 +10,30 @@ A macOS network CLI app that tracks per-app data usage, maintains a persistent h
 
 - **macOS 13+** (Ventura or later)
 - **Xcode Command Line Tools** (`xcode-select --install`)
+- **Homebrew** ([brew.sh](https://brew.sh/))
 
-## Build
-
-From the project directory:
+## Install
 
 ```bash
-swift build
+brew tap uvniche/airtraffic https://github.com/uvniche/airtraffic
+brew install --HEAD uvniche/airtraffic/airtraffic
+```
+
+## Update
+
+```bash
+brew upgrade --fetch-HEAD uvniche/airtraffic/airtraffic
 ```
 
 ## Run
 
-From the project directory:
+Start the interactive shell from any directory:
 
 ```bash
-swift run airtraffic
+airtraffic
 ```
 
-Enter commands at the prompt:
+Then enter commands at the prompt:
 
 ```text
 airtraffic> command
@@ -36,16 +42,16 @@ airtraffic> command
 To stop the app, run:
 
 ```bash
-swift run airtraffic stop
+airtraffic stop
 ```
 
-Run `swift run airtraffic` again to restart the app.
+Run `airtraffic` again to restart the app.
 
 ## Commands
 
 `help` – lists commands grouped by category (`Usage` and `Limits`).
 
-`home` – returns to the startup home screen shown after `swift run airtraffic`.
+`home` – returns to the startup home screen in interactive mode.
 
 `stop` – stops the app without removing its stored data or limits.
 
@@ -75,13 +81,18 @@ Run `swift run airtraffic` again to restart the app.
 
 ## Uninstall
 
-From the project directory:
+First stop AirTraffic and remove its stored data and login item:
 
 ```bash
-swift run airtraffic uninstall
+airtraffic uninstall
 ```
 
-This removes the app and all stored data.
+Then remove the Homebrew package:
+
+```bash
+brew uninstall airtraffic
+brew untap uvniche/airtraffic
+```
 
 ## License
 

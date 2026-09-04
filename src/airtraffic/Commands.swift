@@ -91,7 +91,10 @@ struct HelpCommand {
         print("""
         AirTraffic
 
-        Use: help <category>
+        Usage:
+          airtraffic                 Start the interactive shell
+          airtraffic <command>       Run a command directly
+          airtraffic help <category> Show help for a category
 
         Categories:
           usage
@@ -238,7 +241,7 @@ struct ExportCommand {
     func run() {
         let period = args.first ?? "today"
         guard let state = AirtrafficState.load() else {
-            print("No data yet. Is the app running? Run: swift run airtraffic")
+            print("No data yet. Is the app running? Run: airtraffic")
             return
         }
 
@@ -391,7 +394,7 @@ struct LimitCommand {
 struct LimitsCommand {
     func run() {
         guard let state = AirtrafficState.load() else {
-            print("No data yet. Is the app running? Run: swift run airtraffic")
+            print("No data yet. Is the app running? Run: airtraffic")
             return
         }
 

@@ -6,22 +6,54 @@ struct Airtraffic {
         let interval: TimeInterval = 1.0
         let args = Array(CommandLine.arguments.dropFirst())
 
-        // Internal-only daemon collector path used by the background child process.
-        if args.first == "daemon", args.last == "--daemonized" {
+        // Internal-only collector path used by the LaunchAgent.
+        if args.first == "daemon" {
             await runCollector(interval: interval)
             return
         }
 
-        if args == ["stop"] {
+        guard let command = args.first else {
+            await runInteractiveShell(interval: interval)
+            return
+        }
+
+        let tail = Array(args.dropFirst())
+        let collectorCommands: Set<String> = [
+            "today", "month", "since", "export", "limit", "limits", "live", "once",
+        ]
+        if collectorCommands.contains(command) {
+            startBackgroundAppIfNeeded()
+        }
+
+        switch command {
+        case "help", "--help", "-h":
+            HelpCommand(args: tail).run()
+        case "status":
+            StatusCommand().run()
+        case "stop":
             StopCommand().run()
-            return
-        }
-
-        if args == ["uninstall"] {
+        case "today":
+            await TodayCommand().run()
+        case "month":
+            await MonthCommand().run()
+        case "since":
+            await SinceCommand(args: tail).run()
+        case "export":
+            ExportCommand(args: tail).run()
+        case "limit":
+            LimitCommand(args: tail).run()
+        case "limits":
+            LimitsCommand().run()
+        case "live", "once":
+            await runLiveCommand(
+                interval: interval,
+                once: command == "once" || tail.contains("--once")
+            )
+        case "uninstall":
             UninstallCommand().run()
-            return
+        default:
+            print("Unknown command: \(command)")
+            print("Run 'airtraffic help' to see available commands.")
         }
-
-        await runInteractiveShell(interval: interval)
     }
 }

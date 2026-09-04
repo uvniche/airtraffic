@@ -105,9 +105,10 @@ enum LoginItemInstaller {
            let data = try? Data(contentsOf: plistURL),
            let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
            let args = plist["ProgramArguments"] as? [String],
-           args.count >= 2,
+           args.count >= 3,
            args[0] == executableURL.path,
-           args[1] == "daemon" {
+           args[1] == "daemon",
+           args[2] == "--daemonized" {
             shouldRewrite = false
         }
 
@@ -121,7 +122,7 @@ enum LoginItemInstaller {
 
             let plist: [String: Any] = [
                 "Label": label,
-                "ProgramArguments": [executableURL.path, "daemon"],
+                "ProgramArguments": [executableURL.path, "daemon", "--daemonized"],
                 "RunAtLoad": true,
                 "KeepAlive": true,
             ]

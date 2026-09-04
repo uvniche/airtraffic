@@ -28,13 +28,8 @@ extension Airtraffic {
             killExistingDaemons()
         }
 
-        let child = Process()
-        child.executableURL = URL(fileURLWithPath: desiredExe)
-        child.arguments = ["daemon", "--daemonized"]
-        child.standardInput = FileHandle.nullDevice
-        child.standardOutput = FileHandle.nullDevice
-        child.standardError = FileHandle.nullDevice
-        try? child.run()
+        LoginItemInstaller.ensureInstalledIfNeeded()
+        launchctlBootstrap()
     }
 
     static func isCollectorProbablyRunning(activeStateThresholdSeconds: TimeInterval = 10) -> Bool {
