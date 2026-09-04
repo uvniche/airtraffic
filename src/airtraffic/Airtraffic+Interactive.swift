@@ -14,7 +14,7 @@ extension Airtraffic {
             guard let line = readLine() else { break }
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty { continue }
-            if trimmed == "exit" || trimmed == "quit" { break }
+            if trimmed == "exit" { break }
 
             clearTerminal()
 
@@ -47,9 +47,9 @@ extension Airtraffic {
                 StatusCommand().run()
                 continue
             }
-            if command == "stop" {
+            if command == "quit" || command == "stop" {
                 StopCommand().run()
-                continue
+                break
             }
             if command == "today" {
                 await TodayCommand().run()

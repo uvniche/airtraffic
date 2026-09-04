@@ -54,7 +54,7 @@ struct StatusCommand {
     }
 }
 
-// MARK: - airtraffic stop
+// MARK: - airtraffic quit
 
 struct StopCommand {
     func run() {
@@ -92,7 +92,7 @@ struct HelpCommand {
         AirTraffic
 
         Usage:
-          airtraffic                 Start the interactive shell
+          airtraffic                 Run the interactive shell
           airtraffic <command>       Run a command directly
           airtraffic help <category> Show help for a category
 
@@ -101,7 +101,7 @@ struct HelpCommand {
           limits
 
         Commands:
-          stop - Stop collecting data without uninstalling
+          quit - Quit without removing stored data or limits
         """)
     }
 
@@ -111,7 +111,7 @@ struct HelpCommand {
 
         Usage:
           status - Show how long the app has been running
-          stop - Stop collecting data without uninstalling
+          quit - Quit without removing stored data or limits
           live - Live per-app view, refresh every second
           today - Per-app usage since 12:00 AM today
           month - Per-app usage since 12:00 AM on the first day of the current month

@@ -30,7 +30,7 @@ struct Airtraffic {
             HelpCommand(args: tail).run()
         case "status":
             StatusCommand().run()
-        case "stop":
+        case "quit", "stop":
             StopCommand().run()
         case "today":
             await TodayCommand().run()
