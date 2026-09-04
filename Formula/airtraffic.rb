@@ -1,13 +1,12 @@
 class Airtraffic < Formula
   desc "Track per-app network data usage on macOS"
   homepage "https://github.com/uvniche/airtraffic"
-  url "https://github.com/uvniche/airtraffic/releases/download/rolling/airtraffic-macos-arm64.tar.gz"
+  url "https://github.com/uvniche/airtraffic/releases/download/rolling/airtraffic-macos-universal.tar.gz"
   version "1.0.0"
-  sha256 "f9ef62cd51c5183c34f297d767ef258570c8b1193a4a9556e3e63644304d800a"
+  sha256 "8363742830f67a6e26c66cb158776a4433aa9ff7d3b1dd2efd4a8096575e8a8a"
   license "MIT"
-  revision 5
+  revision 6
 
-  depends_on arch: :arm64
   depends_on macos: :ventura
 
   def install
