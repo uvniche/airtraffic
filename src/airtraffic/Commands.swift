@@ -72,24 +72,29 @@ struct HelpCommand {
     func run() {
         print("""
         AirTraffic
+        macOS Network CLI App
 
         Commands:
           help - Show this help
-          status - Show how long the app has been running
           quit - Quit without removing stored data or limits
+
+        Usage:
+          status - Show how long the app has been running
           live - Live per-app view, refresh every second
           once - Show a single per-app network usage snapshot
           today - Per-app usage since 12:00 AM today
           month - Per-app usage since 12:00 AM on the first day of the current month
           since <dd:MM:yyyy HH:mm> - Per-app usage since a specific date and time
           export <today|month|since> - Export per-app usage as a CSV file
-          uninstall - Remove stored data and the login item
 
         Limits:
-          limit <app> <threshold> - Set a daily per-app data cap. Sends a macOS notification when exceeded
-          limit <threshold> - Set an overall daily data cap (default when app is omitted)
+          limit <threshold> - Set an overall daily data cap and notify when exceeded
+          limit <app> <threshold> - Set a daily per-app data cap
           limits - Show all active limits with current usage vs cap
           limit clear <app|threshold> - Remove a limit
+
+        Uninstall:
+          uninstall - Remove stored data and the login item
         """)
     }
 }
