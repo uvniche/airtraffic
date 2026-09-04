@@ -9,8 +9,16 @@ A macOS network CLI app that tracks per-app data usage, maintains a persistent h
 ## Requirements
 
 - **macOS 13+** (Ventura or later)
-- **Apple silicon Mac**
+- **Intel or Apple silicon Mac**
+- **Xcode 15+**
 - **Homebrew** ([brew.sh](https://brew.sh/))
+
+AirTraffic is compiled natively for your Mac during installation. After installing Xcode, select it as the active developer directory and accept its license:
+
+```bash
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
+```
 
 ## Install
 
