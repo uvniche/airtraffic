@@ -26,20 +26,10 @@ brew upgrade uvniche/airtraffic/airtraffic
 
 ## Run
 
-Run one AirTraffic command at a time in your terminal:
-
 ```bash
 airtraffic <command>
-```
-
-Running `airtraffic` without a command prints a usage hint and exits. Run the
-single help command to see all usage and limit commands:
-
-```bash
 airtraffic help
 ```
-
-Commands that collect or display usage start the background collector automatically.
 
 ## Commands
 
