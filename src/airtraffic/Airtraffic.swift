@@ -13,8 +13,7 @@ struct Airtraffic {
         }
 
         guard let command = args.first else {
-            print("Usage: airtraffic <command>")
-            print("Run 'airtraffic help' to see available commands.")
+            HelpCommand().run()
             return
         }
 

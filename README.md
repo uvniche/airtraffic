@@ -28,7 +28,6 @@ brew upgrade uvniche/airtraffic/airtraffic
 
 ```bash
 airtraffic <command>
-airtraffic help
 ```
 
 ## Commands
