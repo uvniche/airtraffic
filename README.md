@@ -8,7 +8,7 @@ A macOS network CLI app that tracks per-app data usage, maintains a persistent h
 
 ## Requirements
 
-- **macOS 13+** (Ventura or later)
+- **Apple silicon Mac running macOS 13 or later**
 - **Homebrew** ([brew.sh](https://brew.sh/))
 
 ## Install
