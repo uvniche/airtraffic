@@ -27,7 +27,7 @@ brew upgrade --fetch-HEAD uvniche/airtraffic/airtraffic
 
 ## Run
 
-Start the interactive shell from any directory:
+Run AirTraffic in your terminal:
 
 ```bash
 airtraffic
@@ -39,10 +39,10 @@ Then enter commands at the prompt:
 airtraffic> command
 ```
 
-To stop the app, run:
+To quit the app, run:
 
 ```bash
-airtraffic stop
+airtraffic quit
 ```
 
 Run `airtraffic` again to restart the app.
@@ -53,7 +53,7 @@ Run `airtraffic` again to restart the app.
 
 `home` – returns to the startup home screen in interactive mode.
 
-`stop` – stops the app without removing its stored data or limits.
+`quit` – quits the app without removing its stored data or limits.
 
 ### Usage
 
@@ -81,7 +81,7 @@ Run `airtraffic` again to restart the app.
 
 ## Uninstall
 
-First stop AirTraffic and remove its stored data and login item:
+First quit AirTraffic and remove its stored data and login item:
 
 ```bash
 airtraffic uninstall
