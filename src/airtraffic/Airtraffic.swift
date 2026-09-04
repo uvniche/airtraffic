@@ -13,7 +13,8 @@ struct Airtraffic {
         }
 
         guard let command = args.first else {
-            await runInteractiveShell(interval: interval)
+            print("Usage: airtraffic <command>")
+            print("Run 'airtraffic help' to see available commands.")
             return
         }
 
@@ -22,12 +23,16 @@ struct Airtraffic {
             "today", "month", "since", "export", "limit", "limits", "live", "once",
         ]
         if collectorCommands.contains(command) {
-            startBackgroundAppIfNeeded()
+            startCollectorIfNeeded()
         }
 
         switch command {
-        case "help", "--help", "-h":
-            HelpCommand(args: tail).run()
+        case "help":
+            if tail.isEmpty {
+                HelpCommand().run()
+            } else {
+                print("Usage: airtraffic help")
+            }
         case "status":
             StatusCommand().run()
         case "quit", "stop":

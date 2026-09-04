@@ -72,7 +72,7 @@ extension Airtraffic {
                     let stamp = liveClockFormatter.string(from: Date())
                     let waiting = terminalResetPrefix()
                         + "AirTraffic - Live (\(stamp))\n\n"
-                        + "No network data available from nettop.\n\nEsc - Back"
+                        + "No network data available from nettop.\n\nEsc - Exit"
                     ttyWrite(tty, waiting)
                     try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                     continue
@@ -128,7 +128,7 @@ extension Airtraffic {
                 out += fit(formatRate(totalRate), width: colTotal) + "\n"
                 out += "\n"
                 out += "Page \(currentPage + 1)/\(totalPages)\n"
-                out += "Controls: → - Next, ← - Previous, Esc - Back"
+                out += "Controls: → - Next, ← - Previous, Esc - Exit"
                 ttyWrite(tty, out)
             } catch {
                 ttyWrite(tty, "Error: \(error)\n")
@@ -262,10 +262,10 @@ extension Airtraffic {
                 out += fit(formatBytes(totalIn + totalOut), width: colTotal) + "\n"
                 out += "\n"
                 out += "Page \(currentPage + 1)/\(totalPages)\n"
-                out += "Controls: → - Next, ← - Previous, Esc - Back"
+                out += "Controls: → - Next, ← - Previous, Esc - Exit"
                 ttyWrite(tty, out)
             } else {
-                ttyWrite(tty, terminalResetPrefix() + "\(emptyMessage)\n\nEsc - Back")
+                ttyWrite(tty, terminalResetPrefix() + "\(emptyMessage)\n\nEsc - Exit")
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
