@@ -39,12 +39,6 @@ single help command to see all usage and limit commands:
 airtraffic help
 ```
 
-For example, to show today's usage:
-
-```bash
-airtraffic today
-```
-
 Commands that collect or display usage start the background collector automatically.
 
 ## Commands
