@@ -14,6 +14,7 @@ A macOS network CLI app that tracks per-app data usage, maintains a persistent h
 ## Install
 
 ```bash
+brew trust https://github.com/uvniche/airtraffic
 brew tap uvniche/airtraffic https://github.com/uvniche/airtraffic
 brew install uvniche/airtraffic/airtraffic
 ```
